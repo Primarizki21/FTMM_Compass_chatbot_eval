@@ -1,0 +1,21 @@
+[project]
+name = "ftmm-compass-rag"
+version = "0.1.0"
+description = "UI chatbot dan evaluasi metode RAG FTMM COMPASS"
+requires-python = ">=3.12"
+dependencies = [
+    "bert-score>=0.3.13",
+    "google-genai>=1.0",
+    "numpy>=2.0",
+    "ollama>=0.6",
+    "rouge-score>=0.1.2",
+    "streamlit>=1.40",
+    "transformers>=4.40,<5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
