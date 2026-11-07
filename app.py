@@ -54,6 +54,13 @@ def warn_setup_problems(method: str, config: llm.LLMConfig) -> None:
             st.warning(problem)
         st.info("Pertanyaan dan konteks knowledge base dikirim ke server Google.")
 
+    if config.provider == llm.NINE_ROUTER:
+        problem = llm.nine_router_setup_problem(config.model)
+        if problem:
+            st.warning(problem)
+        else:
+            st.info(f"Pertanyaan dan konteks dikirim ke 9Router melalui {llm.nine_router_endpoint()}.")
+
     required = set()
     if config.provider == llm.LOCAL:
         required.add(config.model)
