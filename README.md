@@ -95,7 +95,7 @@ Hasil disimpan per kombinasi LLM, metode, dan top-k di `results/evaluasi/`:
 | `jawaban_*.csv` | Pertanyaan, jawaban acuan, jawaban chatbot, konteks, dan latensi per soal |
 | `skor_*.csv` | Isi file jawaban ditambah skor BERTScore dan ROUGE per soal |
 | `ringkasan_*.csv` | Rata-rata per kategori soal |
-| `jejak_*.jsonl` | Satu baris per soal: kandidat retrieval (`rank`, kode, nama, prodi, skor), konteks, jawaban, dan `error` bila gagal |
+| `jejak_*.jsonl` | Satu baris per soal: kandidat retrieval (`rank`, kode, nama, prodi, skor, `komponen` dense/sparse/rrf, `peringkat` tiap tahap), konteks, jawaban, dan `error` bila gagal |
 | `nilai_*.jsonl` | Metrik per soal (BERTScore, ROUGE) setelah scoring |
 | `run_*.json` | Manifest run: konfigurasi, hash korpus, hash GT, commit |
 

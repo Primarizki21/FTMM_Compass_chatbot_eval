@@ -33,7 +33,14 @@ def run_search(search: SearchFn, query: str) -> tuple[list[tuple[int, float]], f
     return hits, (time.perf_counter() - start) * 1000.0
 
 
-def to_trace(hits: list[tuple[int, float]], courses: list[Course], depth: int = TRACE_DEPTH) -> list[dict]:
+def split_hit(hit: tuple) -> tuple[int, float, dict]:
+    """Terima (idx, skor) atau (idx, skor, komponen) agar pemanggil lama tetap jalan."""
+    idx, score = hit[0], hit[1]
+    komponen = hit[2] if len(hit) > 2 else {}
+    return int(idx), float(score), komponen
+
+
+def to_trace(hits: list[tuple], courses: list[Course], depth: int = TRACE_DEPTH) -> list[dict]:
     return [
         {
             "rank": rank,
@@ -41,8 +48,10 @@ def to_trace(hits: list[tuple[int, float]], courses: list[Course], depth: int = 
             "nama": courses[i].nama,
             "prodi": courses[i].prodi,
             "skor": round(score, 4),
+            "komponen": komponen,
         }
-        for rank, (i, score) in enumerate(hits[:depth], start=1)
+        for rank, hit in enumerate(hits[:depth], start=1)
+        for i, score, komponen in [split_hit(hit)]
     ]
 
 
@@ -62,7 +71,7 @@ def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict]) -> lis
                 "latency_ms": latency,
                 "top5": to_trace(hits, courses, TOP_TRACE),
                 "kandidat": to_trace(hits, courses),
-                "skor_kode": score_ranking((courses[i].kode for i, _ in hits), targets),
+                "skor_kode": score_ranking((courses[i].kode for i, *_ in hits), targets),
             }
         )
     return records
@@ -87,9 +96,9 @@ def eval_complexity(search: SearchFn, courses: list[Course], queries: list[dict]
             prodi = PRODI_BY_ACRONYM[q["program_studi"]]
             record["target"] = sorted(codes)
             record["prodi"] = prodi
-            record["skor_kode"] = score_ranking((courses[i].kode for i, _ in hits), codes)
+            record["skor_kode"] = score_ranking((courses[i].kode for i, *_ in hits), codes)
             record["skor_kode_prodi"] = score_ranking(
-                ((courses[i].kode, courses[i].prodi) for i, _ in hits),
+                ((courses[i].kode, courses[i].prodi) for i, *_ in hits),
                 {(code, prodi) for code in codes},
             )
         records.append(record)

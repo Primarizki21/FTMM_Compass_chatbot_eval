@@ -62,3 +62,11 @@ def test_score_trace_written_per_question(tmp_path):
     assert rows[0]["bert_f1"] == 0.3
     assert rows[0]["rougeL_f1"] == 0.6
     assert "pertanyaan" not in rows[0]
+
+
+def test_to_trace_includes_component_scores():
+    hits = [(0, 0.9, {"dense": 0.7, "sparse": 0.9, "rrf": 0.03}), (1, 0.5, {})]
+    trace = to_trace(hits, courses(), depth=2)
+
+    assert trace[0]["komponen"]["rrf"] == 0.03
+    assert trace[1]["komponen"] == {}

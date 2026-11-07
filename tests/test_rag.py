@@ -225,3 +225,34 @@ def test_app_explains_missing_dense_index(app, monkeypatch, tmp_path):
     assert not at.exception
     assert any("build_index" in error.value for error in at.error)
     assert not log_path.exists()
+
+
+def test_each_method_records_component_scores():
+    retriever = make_retriever()
+
+    bm25 = retriever.retrieve(rag.BM25, "statistika", top_k=3).hits[0]
+    assert set(bm25.komponen) == {"sparse"}
+    assert bm25.peringkat["sparse"] == 1
+    assert bm25.peringkat["final"] == 1
+
+    dense = retriever.retrieve(rag.DENSE, "apa saja", top_k=3).hits[0]
+    assert set(dense.komponen) == {"dense"}
+    assert dense.peringkat["dense"] == 1
+
+    hybrid = retriever.retrieve(rag.HYBRID, "peluang", top_k=3).hits
+    assert all(set(hit.komponen) == {"dense", "sparse", "rrf"} for hit in hybrid)
+    top = hybrid[0]
+    assert top.peringkat["final"] == 1
+    assert top.komponen["rrf"] == pytest.approx(top.score)
+    assert any(hit.komponen["sparse"] == 0.0 and hit.peringkat["sparse"] == 0 for hit in hybrid)
+
+
+def test_reformulated_hybrid_keeps_component_trace():
+    def reformulate(query: str) -> str:
+        return "statistika dasar"
+
+    result = make_retriever().retrieve(rag.HYBRID_REFORMULATED, "peluang", top_k=2, reformulate=reformulate)
+
+    assert result.reformulated_query == "statistika dasar"
+    assert result.hits
+    assert all({"dense", "sparse", "rrf", "final"} == set(hit.komponen) | {"final"} for hit in result.hits)

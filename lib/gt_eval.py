@@ -189,6 +189,8 @@ def answer_question(
             "nama": hit.course.nama,
             "prodi": hit.course.prodi,
             "skor": round(hit.score, 4),
+            "komponen": {name: round(value, 6) for name, value in hit.komponen.items()},
+            "peringkat": hit.peringkat,
         }
         for rank, hit in enumerate(result.hits, start=1)
     ]
