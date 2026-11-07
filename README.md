@@ -36,6 +36,22 @@ uv run pytest
 Bila cache `uv` perlu dipindah (disk kecil atau kebijakan mesin), arahkan `UV_CACHE_DIR` pada shell masing-masing;
 jangan mengubah perintah proyek agar bergantung pada lokasi cache.
 
+### Perintah singkat (Makefile)
+
+Opsional. Butuh `make` (tersedia di Linux, macOS, WSL2). Di Windows tanpa `make`, jalankan perintah `uv run ...` yang sama langsung.
+
+| Perintah | Fungsi |
+|---|---|
+| `make sync` | Pasang dependensi |
+| `make test` | Jalankan seluruh test |
+| `make index` | Buat atau timpa index Dense untuk `EMBED_MODEL_NAME` aktif |
+| `make run` atau `make streamlit` | Jalankan UI |
+| `make bm25` | Benchmark retrieval BM25 tanpa LLM |
+| `make ledger` | Susun ledger agregat dari `results/` |
+| `make clean-index` | Hapus index Dense agar dibuat ulang |
+
+Model embedding mengikuti `EMBED_MODEL_NAME`. Ganti model = jalankan `make index` sekali; berkas model lama tetap ada di `index/` dan bisa dihapus manual.
+
 ### Memakai 9Router (jalur tim)
 
 Akses LLM tim memakai tunnel, bukan `localhost`: kalau tunnel mati, kondisi yang terlihat sama untuk semua orang.
