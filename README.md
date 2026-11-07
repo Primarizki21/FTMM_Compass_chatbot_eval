@@ -17,7 +17,17 @@ dan tidak bergantung pada path absolut atau lokasi cache tertentu.
 uv sync
 ```
 
-Periksa hasilnya; semua test harus lolos:
+### Data yang tidak ikut repo
+
+`knowledge_base/` dan `ground_truth/` sengaja gitignored, jadi tidak ada di clone baru. Minta ke tim, lalu letakkan di root repo:
+
+- `knowledge_base/` — JSON kurikulum per prodi dan subfolder `regulasi/`, apa adanya (format chunk memengaruhi hasil evaluasi).
+- `ground_truth/` — `GT_MASTER.csv`, `ir_eval_dataset.json`, dan `retrieval_complexity_benchmark.json`.
+
+Tanpa keduanya aplikasi gagal memuat dokumen dan sebagian test gagal karena data tidak ada, bukan karena bug kode.
+Ground truth diturunkan dari repo chatbot: `data/ground_truth/gt_master.json` dengan kolom `id, question, answer, source_id, source_type`.
+
+Setelah data lengkap, periksa hasilnya; semua test harus lolos:
 
 ```
 uv run pytest
@@ -60,6 +70,11 @@ dan pastikan layanan Ollama aktif, lalu muat ulang halaman.
    ```
    uv run streamlit run app.py
    ```
+3. Untuk membandingkan retrieval tanpa LLM/GPU (opsional):
+   ```
+   uv run python run_bm25.py --limit 20
+   ```
+   Tanpa `--limit` seluruh dataset dijalankan; hasil ditulis ke `results/bm25/`.
 
 ## Evaluasi Ground Truth
 
