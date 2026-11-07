@@ -4,12 +4,14 @@ UI chatbot dan evaluasi metode RAG FTMM COMPASS. LLM bisa memakai 9Router (OpenA
 Knowledge base berasal dari tim (`Dataset Matkul Prodi` di Drive: 5 JSON kurikulum + panduan regulasi); ground truth diturunkan dari `gt_master.json` repo chatbot.
 
 - **Mode Chat Bebas**: bertanya apa saja, riwayat tersimpan ke `chat_logs/chat_history.csv`.
-- **Mode Evaluasi Ground Truth**: soal `GT_MASTER.csv` (449) dijawab otomatis, lalu dinilai dengan BERTScore dan ROUGE.
+- **Mode Evaluasi Ground Truth**: soal `GT_MASTER.csv` dijawab otomatis, lalu dinilai dengan BERTScore dan ROUGE.
 - **Metode retrieval**: BM25 (Sparse), Dense (Embedding), Hybrid RRF, dan Hybrid + Query Reformulation.
 
 ## Instalasi
 
-WSL2/Linux, Python >= 3.12, `uv`.
+Butuh [uv](https://docs.astral.sh/uv/) (Astral). `uv` yang mengelola versi Python >= 3.12 dan seluruh dependensi, jadi
+tidak perlu venv manual. Berjalan di Linux, macOS, WSL2, maupun Windows; perintah di dokumen ini relatif terhadap root repo
+dan tidak bergantung pada path absolut atau lokasi cache tertentu.
 
 ```
 uv sync
@@ -21,7 +23,8 @@ Periksa hasilnya; semua test harus lolos:
 uv run pytest
 ```
 
-Kalau cache uv memenuhi disk, arahkan ke disk lain: `UV_CACHE_DIR=/path/ke/disk/lain uv sync`.
+Bila cache `uv` perlu dipindah (disk kecil atau kebijakan mesin), arahkan `UV_CACHE_DIR` pada shell masing-masing;
+jangan mengubah perintah proyek agar bergantung pada lokasi cache.
 
 ### Memakai 9Router (jalur tim)
 
@@ -53,7 +56,7 @@ dan pastikan layanan Ollama aktif, lalu muat ulang halaman.
    ```
    uv run python build_index.py
    ```
-2. Jalankan UI, lalu buka http://127.0.0.1:8501
+2. Jalankan UI, lalu buka alamat lokal yang dicetak Streamlit (default `http://127.0.0.1:8501`)
    ```
    uv run streamlit run app.py
    ```
@@ -80,7 +83,7 @@ Kalau file CSV terbuka di Excel saat evaluasi berjalan, penyimpanan bisa gagal. 
 
 | Metrik | Mengukur | Cakupan |
 |---|---|---|
-| Hit@1, Hit@k, MRR | Dokumen sumber ditemukan dan seberapa tinggi peringkatnya | 369 soal silabus |
+| Hit@1, Hit@k, MRR | Dokumen sumber ditemukan dan seberapa tinggi peringkatnya | Soal silabus saja |
 | BERTScore (P, R, F1) | Kemiripan makna jawaban dengan jawaban acuan | Semua soal |
 | ROUGE-1, ROUGE-2, ROUGE-L (F1) | Kemiripan kata jawaban dengan jawaban acuan | Semua soal |
 | TTFT, latensi total P50 dan P95 | Kecepatan | Semua soal |
@@ -92,7 +95,7 @@ Saat menafsirkan hasil:
 
 - Semua soal silabus menyebut kode MK, sehingga BM25 diuntungkan. Untuk membandingkan metode retrieval,
   gunakan juga `run_bm25.py` dengan `ir_eval_dataset.json` dan `retrieval_complexity_benchmark.json`.
-- Jawaban acuan silabus dibuat dari template katalog, dan ada 7 baris duplikat di GT: 3 pertanyaan `Silabus Wajib` muncul dua kali dan 2 muncul tiga kali. Sampel 449 baris tidak sepenuhnya independen.
+- Jawaban acuan silabus dibuat dari template katalog, dan sebagian baris GT memuat pertanyaan duplikat. Hitung ulang dari `GT_MASTER.csv` bila butuh angka; sampel GT tidak sepenuhnya independen.
 - Jawaban yang benar tapi memakai kata lain mendapat ROUGE rendah. BERTScore lebih tepat untuk parafrasa.
 - BERTScore dan ROUGE tidak mendeteksi jawaban yang terdengar benar tapi tidak didukung konteks.
 
@@ -131,8 +134,8 @@ Model LLM juga bisa diganti di sidebar. Index harus dibuat ulang setelah menggan
 | `lib/` | Knowledge base, retriever, LLM, log CSV, evaluasi, metrik |
 | `tests/` | Test pytest (retrieval, evaluasi, provider, ledger) |
 | `docs/ledger/` | Ledger agregat; satu-satunya artefak evaluasi yang di-commit |
-| `knowledge_base/` | 5 file kurikulum (369 MK) dan `regulasi/` (262 butir) dari tim |
-| `ground_truth/` | `GT_MASTER.csv` (449 soal) dan dataset retrieval; turunan `gt_master.json` |
+| `knowledge_base/` | JSON kurikulum per prodi dan `regulasi/` dari tim |
+| `ground_truth/` | `GT_MASTER.csv` dan dataset retrieval; turunan `gt_master.json` |
 | `index/`, `chat_logs/`, `results/`, `.hf_cache/` | Dibuat otomatis saat program berjalan |
 
 Yang disamakan dengan aplikasi: format chunk kurikulum dan regulasi, opsi LLM lokal `PureRAGEngine`, tokenizer dan
