@@ -84,6 +84,9 @@ def test_answer_question_has_no_history_and_hides_reference(monkeypatch):
     assert row["jawaban"] == "ok"
     assert row["jawaban_acuan"] == "RAHASIA ACUAN"
     assert row["peringkat_sumber"] == "1"
+    kandidat = row["_jejak"]["kandidat"][0]
+    assert set(kandidat["komponen"]) == {"sparse"}
+    assert kandidat["peringkat"]["final"] == 1
 
 
 def test_rouge_scores_real_library():

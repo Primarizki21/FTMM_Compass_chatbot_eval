@@ -1,6 +1,7 @@
 """Evaluasi jawaban terhadap ground truth: menjawab soal satu per satu, lalu menghitung skor secara terpisah."""
 
 import csv
+import json
 import os
 import re
 from collections.abc import Callable
@@ -9,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from lib import llm, rag
+from lib import llm, rag, run_manifest
 from lib.chat_log import append_row
 from lib.kb import ROOT
 
@@ -89,6 +90,72 @@ def summary_path(name: str, eval_dir: Path | None = None) -> Path:
     return (eval_dir or EVAL_DIR) / f"ringkasan_{name}.csv"
 
 
+MANIFEST_KEYS = ("corpus_sha256", "gt_sha256", "embedding", "provider", "model", "metode", "top_k")
+
+
+def manifest_path(name: str, eval_dir: Path | None = None) -> Path:
+    return (eval_dir or EVAL_DIR) / f"run_{name}.json"
+
+
+def trace_path(name: str, eval_dir: Path | None = None) -> Path:
+    return (eval_dir or EVAL_DIR) / f"jejak_{name}.jsonl"
+
+
+def score_trace_path(name: str, eval_dir: Path | None = None) -> Path:
+    return (eval_dir or EVAL_DIR) / f"nilai_{name}.jsonl"
+
+
+def run_manifest_fields(
+    config: llm.LLMConfig, method: str, top_k: int, retriever: rag.CourseRetriever, n_planned: int
+) -> dict:
+    return {
+        "jenis": "ground_truth",
+        "provider": config.provider,
+        "model": config.model,
+        "metode": method,
+        "top_k": top_k,
+        "embedding": llm.EMBED_MODEL if method in rag.METHODS_NEEDING_EMBEDDING else "",
+        "corpus_sha256": rag.corpus_hash(retriever.courses),
+        "gt_sha256": run_manifest.file_sha256(GT_PATH),
+        "n_unit": n_planned,
+    }
+
+
+def write_run_manifest(
+    name: str,
+    config: llm.LLMConfig,
+    method: str,
+    top_k: int,
+    retriever: rag.CourseRetriever,
+    n_planned: int,
+    eval_dir: Path | None = None,
+) -> dict:
+    fields = run_manifest_fields(config, method, top_k, retriever, n_planned)
+    return run_manifest.write_manifest(manifest_path(name, eval_dir), fields)
+
+
+def read_run_manifest(name: str, eval_dir: Path | None = None) -> dict | None:
+    return run_manifest.read_manifest(manifest_path(name, eval_dir))
+
+
+def manifest_mismatch(saved: dict, current: dict) -> list[str]:
+    return run_manifest.differences(saved, current, MANIFEST_KEYS)
+
+
+def append_trace(name: str, row: dict, eval_dir: Path | None = None) -> None:
+    path = trace_path(name, eval_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def read_traces(name: str, eval_dir: Path | None = None) -> list[dict]:
+    path = trace_path(name, eval_dir)
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
 def read_rows(path: Path) -> list[dict]:
     if not path.exists():
         return []
@@ -115,7 +182,19 @@ def answer_question(
     messages = rag.build_messages(question, result.hits, history=[])
     answer = "".join(llm.stream_chat(messages, config, rag.keep_alive_for(method), stats))
     codes = [hit.course.kode for hit in result.hits]
-    return {
+    kandidat = [
+        {
+            "rank": rank,
+            "kode": hit.course.kode,
+            "nama": hit.course.nama,
+            "prodi": hit.course.prodi,
+            "skor": round(hit.score, 4),
+            "komponen": {name: round(value, 6) for name, value in hit.komponen.items()},
+            "peringkat": hit.peringkat,
+        }
+        for rank, hit in enumerate(result.hits, start=1)
+    ]
+    row = {
         "id": item["id"],
         "kategori": item["source_type"],
         "source_id": item["source_id"],
@@ -140,6 +219,25 @@ def answer_question(
         "token_jawaban": stats.get("answer_tokens", 0),
         "waktu": datetime.now().isoformat(timespec="seconds"),
     }
+    row["_jejak"] = {
+        "id": row["id"],
+        "kategori": row["kategori"],
+        "pertanyaan": question,
+        "kandidat": kandidat,
+        "konteks": [hit.course.chunk for hit in result.hits],
+        "jawaban": answer,
+        "jawaban_acuan": item["answer"],
+        "kueri_reformulasi": result.reformulated_query,
+        "peringkat_sumber": row["peringkat_sumber"],
+        "latensi_retrieval_ms": row["latensi_retrieval_ms"],
+        "ttft_ms": row["ttft_ms"],
+        "latensi_generasi_ms": row["latensi_generasi_ms"],
+        "token_prompt": row["token_prompt"],
+        "token_jawaban": row["token_jawaban"],
+        "waktu": row["waktu"],
+        "error": None,
+    }
+    return row
 
 
 def save_answer(name: str, row: dict, eval_dir: Path | None = None) -> None:
@@ -217,3 +315,12 @@ def write_scores(name: str, scored: list[dict], summary: list[dict], eval_dir: P
         writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDS)
         writer.writeheader()
         writer.writerows(summary)
+    with open(score_trace_path(name, eval_dir), "w", encoding="utf-8") as f:
+        for row in scored:
+            nilai = {
+                "id": row["id"],
+                "kategori": row["kategori"],
+                "peringkat_sumber": row["peringkat_sumber"],
+                **{field: row[field] for field in SCORE_FIELDS},
+            }
+            f.write(json.dumps(nilai, ensure_ascii=False) + "\n")

@@ -8,3 +8,11 @@ chat_logs/
 results/
 .env
 .hf_cache/
+
+# Local AI agent instructions & graph indexes (developer-local, bukan milik tim)
+AGENTS.md
+CLAUDE.md
+.agents/
+.omp/
+.codegraph/
+graphify-out/

@@ -1,8 +1,9 @@
-"""Akses LLM lokal (Ollama) atau Gemini API, dan embedding lokal.
+"""Akses LLM lokal (Ollama), 9Router OpenAI-compatible, atau Gemini API, dan embedding lokal.
 
 Model lokal dimuat bergantian (keep_alive=0) karena VRAM 4 GB tidak muat untuk dua model sekaligus.
 """
 
+import json
 import os
 import time
 from collections.abc import Iterator
@@ -15,8 +16,9 @@ import ollama
 from lib.kb import ROOT
 
 LOCAL = "Lokal (Ollama)"
+NINE_ROUTER = "9Router (OpenAI-compatible)"
 GEMINI = "Gemini API"
-PROVIDERS = [LOCAL, GEMINI]
+PROVIDERS = [LOCAL, NINE_ROUTER, GEMINI]
 
 
 def load_env_file(path=ROOT / ".env") -> None:
@@ -33,6 +35,7 @@ load_env_file()
 
 LOCAL_MODEL = os.getenv("LLM_MODEL_NAME", "llama3.2:3b")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+NINE_ROUTER_MODEL = os.getenv("NINE_ROUTER_MODEL", "").strip()
 EMBED_MODEL = os.getenv("EMBED_MODEL_NAME", "nomic-embed-text-v2-moe")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
@@ -55,7 +58,7 @@ class LLMConfig:
     model: str
 
 
-DEFAULT_MODELS = {LOCAL: LOCAL_MODEL, GEMINI: GEMINI_MODEL}
+DEFAULT_MODELS = {LOCAL: LOCAL_MODEL, NINE_ROUTER: NINE_ROUTER_MODEL, GEMINI: GEMINI_MODEL}
 
 _ollama_client = ollama.Client(host=OLLAMA_HOST)
 
@@ -87,6 +90,102 @@ def gemini_setup_problem() -> str | None:
     except ImportError:
         return "Paket google-genai belum terpasang. Lihat bagian instalasi di README."
     return None
+
+
+def _nine_router_settings() -> tuple[str, str]:
+    """Base URL tanpa akhiran /v1, dan key terbitan dashboard 9router."""
+    host = os.getenv("NINE_ROUTER_HOST", "").strip().rstrip("/")
+    if host.endswith("/v1"):
+        host = host[: -len("/v1")]
+    return host, os.getenv("NINE_ROUTER_API_KEY", "").strip()
+
+
+def nine_router_setup_problem(model: str) -> str | None:
+    host, key = _nine_router_settings()
+    if not host:
+        return "NINE_ROUTER_HOST belum diatur. Isi base URL tunnel 9router di file .env."
+    if not key:
+        return "NINE_ROUTER_API_KEY belum diatur. Isi key dari dashboard 9router di file .env."
+    if not model.strip():
+        return "Model 9Router belum diisi. Isi kolom Model LLM di sidebar atau NINE_ROUTER_MODEL di .env."
+    return None
+
+
+def nine_router_endpoint() -> str:
+    return f"{_nine_router_settings()[0]}/v1/chat/completions"
+
+
+def _nine_router_headers(key: str) -> dict[str, str]:
+    return {"Content-Type": "application/json", "Authorization": f"Bearer {key}"}
+
+
+def _nine_router_error(response: httpx.Response) -> LLMError:
+    body = response.read().decode("utf-8", "replace")[:500]
+    return LLMError(
+        f"9Router menolak permintaan ({response.status_code}): {body}. "
+        "NINE_ROUTER_HOST harus base URL tunnel 9router dan NINE_ROUTER_API_KEY harus key "
+        "terbitan dashboard 9router, bukan kunci Google Gemini."
+    )
+
+
+def _stream_nine_router(messages: list[dict], model: str, start: float, stats: dict) -> Iterator[str]:
+    problem = nine_router_setup_problem(model)
+    if problem:
+        raise LLMError(problem)
+    _, key = _nine_router_settings()
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": CHAT_OPTIONS["temperature"],
+        "top_p": CHAT_OPTIONS["top_p"],
+        "max_tokens": CHAT_OPTIONS["num_predict"],
+        "stream": True,
+    }
+    timeout = httpx.Timeout(120.0, connect=5.0)
+    with httpx.stream(
+        "POST", nine_router_endpoint(), json=payload, headers=_nine_router_headers(key), timeout=timeout
+    ) as response:
+        if response.status_code >= 400:
+            raise _nine_router_error(response)
+        for line in response.iter_lines():
+            if not line.startswith("data:"):
+                continue
+            raw = line[len("data:") :].strip()
+            if raw == "[DONE]":
+                break
+            try:
+                chunk = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            usage = chunk.get("usage") or {}
+            if usage:
+                stats["prompt_tokens"] = usage.get("prompt_tokens") or 0
+                stats["answer_tokens"] = usage.get("completion_tokens") or 0
+            first_choice = (chunk.get("choices") or [{}])[0]
+            text = (first_choice.get("delta") or {}).get("content") or ""
+            if text:
+                stats.setdefault("ttft_ms", (time.perf_counter() - start) * 1000.0)
+                yield text
+
+
+def _nine_router_complete(prompt: str, model: str, max_tokens: int) -> str:
+    problem = nine_router_setup_problem(model)
+    if problem:
+        raise LLMError(problem)
+    _, key = _nine_router_settings()
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.0,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    timeout = httpx.Timeout(60.0, connect=5.0)
+    response = httpx.post(nine_router_endpoint(), json=payload, headers=_nine_router_headers(key), timeout=timeout)
+    if response.status_code >= 400:
+        raise _nine_router_error(response)
+    first_choice = (response.json().get("choices") or [{}])[0]
+    return (first_choice.get("message") or {}).get("content") or ""
 
 
 def _gemini_client():
@@ -152,6 +251,8 @@ def stream_chat(messages: list[dict], config: LLMConfig, keep_alive: int | str, 
     start = time.perf_counter()
     if config.provider == GEMINI:
         yield from _stream_gemini(messages, config.model, start, stats)
+    elif config.provider == NINE_ROUTER:
+        yield from _stream_nine_router(messages, config.model, start, stats)
     else:
         yield from _stream_ollama(messages, config.model, keep_alive, start, stats)
     stats["generation_ms"] = (time.perf_counter() - start) * 1000.0
@@ -178,6 +279,8 @@ def reformulate_query(query: str, config: LLMConfig) -> str:
         except errors.APIError as error:
             raise LLMError(f"Gemini API menolak permintaan ({error.code}): {error.message}") from error
         text = response.text or ""
+    elif config.provider == NINE_ROUTER:
+        text = _nine_router_complete(prompt, config.model, max_tokens=30)
     else:
         response = _ollama_client.chat(
             model=config.model,
