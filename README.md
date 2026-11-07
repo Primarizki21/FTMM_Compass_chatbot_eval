@@ -1,7 +1,7 @@
 # RAG
 
 UI chatbot dan evaluasi metode RAG FTMM COMPASS. LLM bisa memakai 9Router (OpenAI-compatible, lewat tunnel tim), model lokal (Ollama), atau Gemini API.
-Knowledge base berasal dari tim (`Dataset Matkul Prodi` di Drive: 5 JSON kurikulum + panduan regulasi); ground truth diturunkan dari `gt_master.json` repo chatbot.
+Knowledge base berasal dari tim (`Dataset Matkul Prodi` di Drive: JSON kurikulum per prodi + panduan regulasi); ground truth diturunkan dari `gt_master.json` repo chatbot.
 
 - **Mode Chat Bebas**: bertanya apa saja, riwayat tersimpan ke `chat_logs/chat_history.csv`.
 - **Mode Evaluasi Ground Truth**: soal `GT_MASTER.csv` dijawab otomatis, lalu dinilai dengan BERTScore dan ROUGE.
@@ -72,14 +72,14 @@ Pertanyaan dan potongan knowledge base akan dikirim ke server Google. Pastikan i
 
 ### Memakai LLM lokal
 
-`ollama list` harus menampilkan `llama3.2:3b` (atau nilai `LLM_MODEL_NAME`). Kalau daemon tidak terbaca, cek `OLLAMA_HOST`
+`ollama list` harus menampilkan model yang tercantum di `LLM_MODEL_NAME`. Kalau daemon tidak terbaca, cek `OLLAMA_HOST`
 dan pastikan layanan Ollama aktif, lalu muat ulang halaman.
 
 ## Menjalankan
 
 1. Buat index Dense. Cukup sekali per kombinasi isi `knowledge_base/` dan model embedding; tidak perlu diulang setiap
    kali menjalankan UI. Jalankan ulang hanya bila knowledge base berubah atau `EMBED_MODEL_NAME` diganti. Metode BM25
-   tidak membutuhkannya. Butuh `nomic-embed-text-v2-moe` di Ollama.
+   tidak membutuhkannya. Model embedding mengikuti `EMBED_MODEL_NAME` di `.env` dan harus tersedia di Ollama.
    ```
    uv run python build_index.py
    ```
@@ -94,15 +94,16 @@ dan pastikan layanan Ollama aktif, lalu muat ulang halaman.
    ```
    uv run python run_bm25.py --limit 20
    ```
-   Tanpa `--limit` seluruh dataset dijalankan; hasil ditulis ke `results/bm25/`.
+   Tanpa `--limit` seluruh dataset dijalankan; hasil ditulis ke `results/bm25/`: `metrics.csv`, `summary.md`,
+   `traces.jsonl` (satu baris per kueri dengan `kandidat` ber-`rank` dan `komponen` per tahap), dan `run.json`.
 
 ## Evaluasi Ground Truth
 
 1. Pilih metode, sumber LLM, dan top-k di sidebar.
 2. Isi jumlah soal, misalnya 30 untuk uji coba. Sampel tersebar merata ke semua kategori.
 3. Klik **Mulai / Lanjutkan**. Kalau berhenti atau error, klik lagi; soal yang selesai tidak diulang.
-4. Klik **Hitung skor** setelah selesai. BERTScore berjalan di CPU. Saat pertama kali, model
-   `bert-base-multilingual-cased` diunduh ke `.hf_cache/`.
+4. Klik **Hitung skor** setelah selesai. BERTScore berjalan di CPU. Saat pertama kali, model BERTScore multibahasa
+   diunduh ke `.hf_cache/`.
 
 Hasil disimpan per kombinasi LLM, metode, dan top-k di `results/evaluasi/`:
 
@@ -116,6 +117,10 @@ Hasil disimpan per kombinasi LLM, metode, dan top-k di `results/evaluasi/`:
 | `run_*.json` | Manifest run: konfigurasi, hash korpus, hash GT, commit |
 
 Kalau file CSV terbuka di Excel saat evaluasi berjalan, penyimpanan bisa gagal. Tutup dulu, atau gunakan tombol unduh.
+
+Hasil terikat pada manifest `run_*.json`. Bila hash korpus, hash GT, atau konfigurasi run berbeda dari hasil lama,
+tombol **Mulai / Lanjutkan** diblokir agar jawaban dari dua versi data tidak tercampur. Pindahkan hasil lama atau ganti
+kombinasi model/metode/top-k untuk memulai run baru.
 
 ### Metrik
 
@@ -169,7 +174,8 @@ Model LLM juga bisa diganti di sidebar. Index harus dibuat ulang setelah menggan
 | `build_index.py` | Membuat index Dense |
 | `run_bm25.py` | Evaluasi retrieval BM25 (`--output`, `--limit`) |
 | `scripts/ledger.py` | Menyusun ledger agregat dari `results/` |
-| `lib/` | Knowledge base, retriever, LLM, log CSV, evaluasi, metrik |
+| `Makefile` | Perintah pendek: `sync`, `test`, `index`, `run`, `bm25`, `ledger` |
+| `lib/` | Knowledge base, retriever, LLM, manifest run, log CSV, evaluasi, metrik |
 | `tests/` | Test pytest (retrieval, evaluasi, provider, ledger) |
 | `docs/ledger/` | Ledger agregat; satu-satunya artefak evaluasi yang di-commit |
 | `knowledge_base/` | JSON kurikulum per prodi dan `regulasi/` dari tim |
@@ -180,8 +186,8 @@ Yang disamakan dengan aplikasi: format chunk kurikulum dan regulasi, opsi LLM lo
 parameter BM25, RRF k=60, serta prompt reformulasi.
 
 Yang berbeda: kurikulum dan regulasi dicari dalam satu index (di aplikasi terpisah), prompt sistem menyebut regulasi,
-pencarian Dense memakai NumPy (hasil setara `IndexFlatIP`), batas keluaran 9Router 512 token mengikuti `PureRAGEngine`,
-batas Gemini 2.048 token karena token thinking ikut terhitung, dan ada filter prodi opsional.
+pencarian Dense memakai NumPy (hasil setara `IndexFlatIP`), batas keluaran mengikuti `CHAT_OPTIONS` untuk 9Router/Ollama
+dan `GEMINI_MAX_OUTPUT_TOKENS` untuk Gemini, serta ada filter prodi opsional.
 
 Batasan: kueri lanjutan seperti "prasyaratnya apa?" dicari apa adanya, sama seperti `PureRAGEngine`.
 
