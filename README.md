@@ -58,7 +58,7 @@ Akses LLM tim memakai tunnel, bukan `localhost`: kalau tunnel mati, kondisi yang
 
 1. Salin `.env.example` menjadi `.env`.
 2. Isi `NINE_ROUTER_API_KEY=` dengan key dari dashboard 9router. Kunci Google Gemini ditolak.
-3. `NINE_ROUTER_HOST` dan `NINE_ROUTER_MODEL` sudah terisi default tim; model wajib memakai prefix provider (`ag/...`).
+3. Salin `NINE_ROUTER_HOST` dan `NINE_ROUTER_MODEL` dari tim ke `.env`; model wajib memakai prefix provider (`ag/...`).
 4. Pilih `9Router (OpenAI-compatible)` di sidebar.
 
 Pertanyaan dan potongan knowledge base dikirim ke 9Router. Embedding tetap memakai model lokal, jadi metode selain BM25 tetap membutuhkan Ollama.
