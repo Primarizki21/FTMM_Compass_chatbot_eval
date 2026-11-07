@@ -61,11 +61,15 @@ dan pastikan layanan Ollama aktif, lalu muat ulang halaman.
 
 ## Menjalankan
 
-1. Buat index Dense. Wajib untuk metode selain BM25, dan diulang setiap kali knowledge base berubah.
-   Butuh `nomic-embed-text-v2-moe` di Ollama.
+1. Buat index Dense. Cukup sekali per kombinasi isi `knowledge_base/` dan model embedding; tidak perlu diulang setiap
+   kali menjalankan UI. Jalankan ulang hanya bila knowledge base berubah atau `EMBED_MODEL_NAME` diganti. Metode BM25
+   tidak membutuhkannya. Butuh `nomic-embed-text-v2-moe` di Ollama.
    ```
    uv run python build_index.py
    ```
+   Index dimuat saat kueri Dense/Hybrid pertama dan divalidasi terhadap hash korpus. Bila index belum ada atau basi,
+   UI menampilkan pesan untuk menjalankan skrip ini. Setelah rebuild, restart Streamlit agar matriks lama tidak tertahan
+   di cache.
 2. Jalankan UI, lalu buka alamat lokal yang dicetak Streamlit (default `http://127.0.0.1:8501`)
    ```
    uv run streamlit run app.py
