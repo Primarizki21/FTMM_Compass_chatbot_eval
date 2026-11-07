@@ -10,6 +10,10 @@ Berkas di folder ini adalah satu-satunya artefak evaluasi yang boleh masuk repo 
 | `runs.csv` | versi panjang: satu baris per (run, dataset, penilaian, kelompok) dengan angka mentah | spreadsheet, analisis |
 | `archives.csv` | peta `run` → URL folder Drive hasil mentah | pengisi `RUNS.md` |
 
+Provenance (`commit`, `corpus_hash`, `dataset_hash`, `embedding`) diambil dari manifest run:
+`results/<run>/run.json` untuk retrieval, dan `results/evaluasi/run_<name>.json` untuk evaluasi ground truth.
+Bila manifest tidak ada (hasil lama), ledger memakai fallback dan kolom hash korpus dibiarkan kosong.
+
 `runs.csv` dan `RUNS.md` dihasilkan otomatis; jangan diedit manual.
 
 ```bash

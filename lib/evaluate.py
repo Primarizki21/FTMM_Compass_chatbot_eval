@@ -8,12 +8,15 @@ from pathlib import Path
 
 import numpy as np
 
+from lib import run_manifest
 from lib.kb import PRODI_BY_ACRONYM, ROOT, Course
 from lib.metrics import score_ranking
+from lib.rag import corpus_hash
 
 GT_DIR = ROOT / "ground_truth"
 METRIC_NAMES = ["hit@1", "hit@3", "hit@5", "mrr@5", "recall@5", "ndcg@5"]
 TOP_TRACE = 5
+TRACE_DEPTH = 20
 
 SearchFn = Callable[[str], list[tuple[int, float]]]
 
@@ -30,10 +33,16 @@ def run_search(search: SearchFn, query: str) -> tuple[list[tuple[int, float]], f
     return hits, (time.perf_counter() - start) * 1000.0
 
 
-def to_trace(hits: list[tuple[int, float]], courses: list[Course]) -> list[dict]:
+def to_trace(hits: list[tuple[int, float]], courses: list[Course], depth: int = TRACE_DEPTH) -> list[dict]:
     return [
-        {"kode": courses[i].kode, "nama": courses[i].nama, "prodi": courses[i].prodi, "skor": round(score, 4)}
-        for i, score in hits[:TOP_TRACE]
+        {
+            "rank": rank,
+            "kode": courses[i].kode,
+            "nama": courses[i].nama,
+            "prodi": courses[i].prodi,
+            "skor": round(score, 4),
+        }
+        for rank, (i, score) in enumerate(hits[:depth], start=1)
     ]
 
 
@@ -51,7 +60,8 @@ def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict]) -> lis
                 "jumlah_target": "tunggal" if len(targets) == 1 else "ganda",
                 "target": sorted(targets),
                 "latency_ms": latency,
-                "top5": to_trace(hits, courses),
+                "top5": to_trace(hits, courses, TOP_TRACE),
+                "kandidat": to_trace(hits, courses),
                 "skor_kode": score_ranking((courses[i].kode for i, _ in hits), targets),
             }
         )
@@ -68,7 +78,8 @@ def eval_complexity(search: SearchFn, courses: list[Course], queries: list[dict]
             "query": q["query"],
             "tier": q["complexity_tier"],
             "latency_ms": latency,
-            "top5": to_trace(hits, courses),
+            "top5": to_trace(hits, courses, TOP_TRACE),
+            "kandidat": to_trace(hits, courses),
             "skor_teratas": hits[0][1] if hits else 0.0,
         }
         if not q["is_out_of_scope"]:
@@ -199,6 +210,21 @@ def write_report(
         "",
     ]
     (output_dir / "summary.md").write_text("\n".join(summary), encoding="utf-8")
+    run_manifest.write_manifest(
+        output_dir / "run.json",
+        {
+            "jenis": "retrieval",
+            "metode": method,
+            "provider": "lokal",
+            "model": "-",
+            "top_k": TOP_TRACE,
+            "embedding": "-",
+            "corpus_sha256": corpus_hash(courses),
+            "dataset": "ir_eval+complexity",
+            "dataset_sha256": run_manifest.file_sha256(GT_DIR / "ir_eval_dataset.json"),
+            "n_unit": len(ir_records) + len(complexity_records),
+        },
+    )
     return rows
 
 

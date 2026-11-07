@@ -1,5 +1,6 @@
 """UI chatbot RAG FTMM COMPASS dengan dua mode: chat bebas dan evaluasi ground truth."""
 
+import json
 import time
 from datetime import datetime
 from uuid import uuid4
@@ -78,6 +79,20 @@ def warn_setup_problems(method: str, config: llm.LLMConfig) -> None:
             f"Model belum terbaca Ollama: {', '.join(sorted(missing))}. Cek dengan `ollama list`. "
             "Kalau modelnya ada di E:\\Ollama_models, tutup Ollama lalu buka lagi."
         )
+
+
+def index_status(method: str) -> str:
+    if method not in rag.METHODS_NEEDING_EMBEDDING:
+        return ""
+    matrix_path, meta_path = rag.index_paths(llm.EMBED_MODEL)
+    if not matrix_path.exists() or not meta_path.exists():
+        return "Index Dense: belum dibuat"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        current = rag.corpus_hash(get_retriever().courses)
+    except Exception:
+        return "Index Dense: tidak terbaca"
+    return "Index Dense: siap" if meta.get("corpus_sha256") == current else "Index Dense: basi, jalankan build_index.py"
 
 
 def chat_page(method: str, top_k: int, config: llm.LLMConfig) -> None:
@@ -219,11 +234,26 @@ def evaluation_page(method: str, top_k: int, config: llm.LLMConfig) -> None:
     st.progress(finished / len(selected), text=f"{finished}/{len(selected)} soal selesai")
     st.caption(f"File hasil: {gt_eval.answers_path(name)}")
 
+    saved_manifest = gt_eval.read_run_manifest(name)
+    mismatch = []
+    if saved_manifest:
+        current = gt_eval.run_manifest_fields(config, method, top_k, get_retriever(), len(selected))
+        mismatch = gt_eval.manifest_mismatch(saved_manifest, current)
+    if mismatch:
+        st.error(
+            "Hasil lama dibuat dengan konfigurasi atau data berbeda, jadi tidak boleh dilanjutkan: "
+            + "; ".join(mismatch)
+            + ". Ganti nama run (model/metode/top-k) atau pindahkan berkas lama ke folder arsip."
+        )
+
     if st.session_state.eval_error:
         st.error(st.session_state.eval_error)
 
+    blocked = running or not remaining or bool(mismatch)
     start_col, stop_col = st.columns(2)
-    if start_col.button("Mulai / Lanjutkan", disabled=running or not remaining, use_container_width=True):
+    if start_col.button("Mulai / Lanjutkan", disabled=blocked, use_container_width=True):
+        if not saved_manifest:
+            gt_eval.write_run_manifest(name, config, method, top_k, get_retriever(), len(selected))
         st.session_state.eval_running = True
         st.session_state.eval_error = ""
         st.rerun()
@@ -237,10 +267,22 @@ def evaluation_page(method: str, top_k: int, config: llm.LLMConfig) -> None:
         try:
             row = gt_eval.answer_question(get_retriever(), item, method, top_k, config)
         except ERRORS as error:
+            gt_eval.append_trace(
+                name,
+                {
+                    "id": item["id"],
+                    "kategori": item["source_type"],
+                    "error": f"{type(error).__name__}: {error}",
+                    "waktu": datetime.now().isoformat(timespec="seconds"),
+                },
+            )
             st.session_state.eval_running = False
             st.session_state.eval_error = f"Evaluasi berhenti di soal {item['id']}: {error}. Jawaban sebelumnya tetap tersimpan."
             st.rerun()
         else:
+            trace = row.pop("_jejak", None)
+            if trace:
+                gt_eval.append_trace(name, trace)
             gt_eval.save_answer(name, row)
             if delay and len(remaining) > 1:
                 time.sleep(delay)
@@ -264,6 +306,12 @@ with st.sidebar:
     model = st.text_input("Model LLM", llm.DEFAULT_MODELS[provider], key=f"model_{provider}", disabled=is_running)
     top_k_choice = st.number_input("Jumlah dokumen (top-k)", 1, 10, 3, disabled=is_running)
     st.caption(f"Embedding: {llm.EMBED_MODEL}")
+    status = index_status(method_choice)
+    if status:
+        st.caption(status)
+    if st.button("Muat ulang data", use_container_width=True):
+        st.cache_resource.clear()
+        st.rerun()
     llm_config = llm.LLMConfig(provider, model.strip())
     warn_setup_problems(method_choice, llm_config)
     st.divider()

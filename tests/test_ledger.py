@@ -1,5 +1,6 @@
 import csv
 import importlib.util
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -121,3 +122,50 @@ def test_ledger_merges_drive_archive_link(tmp_path, monkeypatch):
 
     assert links == {"https://drive.google.com/drive/folders/uji"}
     assert "drive.google.com" in ledger.render_markdown(rows)
+
+
+def test_ledger_uses_manifest_provenance(tmp_path, monkeypatch):
+    monkeypatch.setattr(ledger, "ARCHIVES", tmp_path / "archives.csv")
+    results = make_results(tmp_path)
+    (results / "bm25" / "run.json").write_text(
+        json.dumps(
+            {
+                "commit": "deadbee",
+                "ditulis": "2026-01-02T03:04:05",
+                "metode": "BM25 (k1=1.5, b=0.75)",
+                "provider": "lokal",
+                "model": "-",
+                "top_k": 5,
+                "embedding": "-",
+                "corpus_sha256": "korpus123",
+                "dataset_sha256": "dataset456",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (results / "evaluasi" / "run_lokal-uji.json").write_text(
+        json.dumps(
+            {
+                "commit": "cafe123",
+                "provider": "9Router (OpenAI-compatible)",
+                "model": "ag/gemini-x",
+                "metode": "BM25 (Sparse)",
+                "top_k": 3,
+                "embedding": "",
+                "corpus_sha256": "korpus123",
+                "gt_sha256": "gt789",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = ledger.collect(results)
+    retrieval = next(row for row in rows if row["jenis"] == "retrieval")
+    ground_truth = next(row for row in rows if row["jenis"] == "ground_truth")
+
+    assert retrieval["corpus_hash"] == "korpus123"
+    assert retrieval["dataset_hash"] == "dataset456"
+    assert retrieval["commit"] == "deadbee"
+    assert ground_truth["corpus_hash"] == "korpus123"
+    assert ground_truth["dataset_hash"] == "gt789"
+    assert ground_truth["commit"] == "cafe123"

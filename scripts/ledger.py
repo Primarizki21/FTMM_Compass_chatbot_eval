@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 RESULTS = ROOT / "results"
 OUT = ROOT / "docs" / "ledger"
 ARCHIVES = OUT / "archives.csv"
@@ -59,6 +60,7 @@ RUN_FIELDS = [
     "metode",
     "top_k",
     "embedding",
+    "corpus_hash",
     "dataset",
     "penilaian",
     "kelompok",
@@ -122,6 +124,17 @@ def load_archives() -> dict[str, str]:
     return {row["run"]: row["drive_url"] for row in read_rows(ARCHIVES, ["run", "drive_url"])}
 
 
+def read_manifest(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        import json
+
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
 def collect(results_dir: Path) -> list[dict]:
     commit = git_commit()
     gt_hash = dataset_hash()
@@ -130,6 +143,7 @@ def collect(results_dir: Path) -> list[dict]:
 
     for run_dir in sorted(p for p in results_dir.iterdir() if p.is_dir()):
         run = run_dir.name
+        manifest = read_manifest(run_dir / "run.json")
         metrics = run_dir / "metrics.csv"
         if metrics.exists():
             for row in read_rows(metrics, RETRIEVAL_COLUMNS):
@@ -137,13 +151,14 @@ def collect(results_dir: Path) -> list[dict]:
                     {
                         "run": run,
                         "jenis": "retrieval",
-                        "tanggal": last_modified([metrics, run_dir / "summary.md"]),
-                        "commit": commit,
-                        "provider": "lokal",
-                        "model": "-",
-                        "metode": summary_title(run_dir / "summary.md") or run,
-                        "top_k": "5",
-                        "embedding": "-",
+                        "tanggal": manifest.get("ditulis") or last_modified([metrics, run_dir / "summary.md"]),
+                        "commit": manifest.get("commit") or commit,
+                        "provider": manifest.get("provider", "lokal"),
+                        "model": manifest.get("model", "-"),
+                        "metode": manifest.get("metode") or summary_title(run_dir / "summary.md") or run,
+                        "top_k": manifest.get("top_k", "5"),
+                        "embedding": manifest.get("embedding", "-"),
+                        "corpus_hash": manifest.get("corpus_sha256", ""),
                         "dataset": row["dataset"],
                         "penilaian": row["penilaian"],
                         "kelompok": row["kelompok"],
@@ -154,26 +169,29 @@ def collect(results_dir: Path) -> list[dict]:
                         "ndcg": row["ndcg@5"],
                         "latensi_p50_ms": row["latensi_p50_ms"],
                         "latensi_p95_ms": row["latensi_p95_ms"],
-                        "dataset_hash": gt_hash,
+                        "dataset_hash": manifest.get("dataset_sha256") or gt_hash,
                         "arsip_drive": archives.get(run, ""),
                     }
                 )
 
         for summary in sorted(run_dir.glob("ringkasan_*.csv")):
-            scores = run_dir / f"skor_{summary.name.removeprefix('ringkasan_')}"
+            run_name = summary.stem.removeprefix("ringkasan_")
+            manifest = read_manifest(run_dir / f"run_{run_name}.json")
+            scores = run_dir / f"skor_{run_name}.csv"
             meta = first_row(scores, EVAL_META_COLUMNS)
             for row in read_rows(summary, SUMMARY_COLUMNS):
                 records.append(
                     {
-                        "run": summary.stem.removeprefix("ringkasan_"),
+                        "run": run_name,
                         "jenis": "ground_truth",
-                        "tanggal": last_modified([summary, scores]),
-                        "commit": commit,
-                        "provider": meta.get("penyedia_llm", ""),
-                        "model": meta.get("model_llm", ""),
-                        "metode": meta.get("metode", ""),
-                        "top_k": meta.get("top_k", ""),
-                        "embedding": meta.get("model_embedding", ""),
+                        "tanggal": manifest.get("ditulis") or last_modified([summary, scores]),
+                        "commit": manifest.get("commit") or commit,
+                        "provider": manifest.get("provider") or meta.get("penyedia_llm", ""),
+                        "model": manifest.get("model") or meta.get("model_llm", ""),
+                        "metode": manifest.get("metode") or meta.get("metode", ""),
+                        "top_k": manifest.get("top_k") or meta.get("top_k", ""),
+                        "embedding": manifest.get("embedding") or meta.get("model_embedding", ""),
+                        "corpus_hash": manifest.get("corpus_sha256", ""),
                         "dataset": "GT_MASTER",
                         "penilaian": "",
                         "kelompok": row["kelompok"],
@@ -185,8 +203,8 @@ def collect(results_dir: Path) -> list[dict]:
                         "rouge_l_f1": row["rougeL_f1"],
                         "ttft_p50_ms": row["ttft_p50_ms"],
                         "total_p95_ms": row["total_p95_ms"],
-                        "dataset_hash": gt_hash,
-                        "arsip_drive": archives.get(summary.stem.removeprefix("ringkasan_"), ""),
+                        "dataset_hash": manifest.get("gt_sha256") or gt_hash,
+                        "arsip_drive": archives.get(run_name, ""),
                     }
                 )
     return records
