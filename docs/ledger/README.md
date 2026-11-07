@@ -37,7 +37,7 @@ Repo ini publik. Jangan menambahkan teks soal, jawaban acuan, atau potongan sila
 Hasil mentah (CSV jawaban/skor, traces, log chat) tetap lokal karena memuat isi kurikulum dan pertanyaan mahasiswa. Untuk dibagikan ke tim, unggah sebagai satu folder per run ke Drive proyek:
 
 - Folder induk: `Project FTMM COMPASS` — https://drive.google.com/drive/folders/127DPRBrV9Ng7uiIwRGCPF_7OBeaVVnsz
-- Subfolder tujuan: `Hasil Evaluasi RAG` (belum dibuat; root folder saat ini hanya berisi `Dataset Matkul Prodi`, shortcut `Ground Truth NLP`, dan `Paper Referensi`)
+- Subfolder tujuan: `Hasil Evaluasi RAG` di root folder tersebut
 - Nama folder arsip: `<YYYY-MM-DD>_<metode>_<provider-model>_k<k>`, contoh `2026-11-07_bm25_lokal-k3`
 
 Setelah folder terunggah, catat tautannya:
@@ -49,4 +49,5 @@ bm25,https://drive.google.com/drive/folders/<id>
 
 lalu jalankan ulang `scripts/ledger.py` agar kolom Arsip di `RUNS.md` terisi.
 
-Status akses: Drive MCP pada mesin ini menolak permintaan (`authorization was revoked`). Upload dan pembuatan subfolder menunggu otorisasi ulang akun Drive.
+Status akses: periksa dengan `authGetStatus`. Bila `needs_reauth`, jalankan
+`npx -y @piotr-agier/google-drive-mcp auth`, lalu restart sesi agent agar server MCP membaca token baru.
