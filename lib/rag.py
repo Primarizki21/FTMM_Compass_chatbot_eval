@@ -63,7 +63,7 @@ def index_paths(model: str, index_dir: Path = INDEX_DIR) -> tuple[Path, Path]:
 
 def load_dense_index(courses: list[Course], model: str, index_dir: Path = INDEX_DIR) -> np.ndarray:
     matrix_path, meta_path = index_paths(model, index_dir)
-    build_hint = "Jalankan: python -m uv run python build_index.py"
+    build_hint = "Jalankan: uv run python build_index.py"
     if not matrix_path.exists() or not meta_path.exists():
         raise DenseIndexError(f"Index untuk model {model} belum dibuat. {build_hint}")
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
