@@ -1,7 +1,7 @@
 # RAG
 
-UI chatbot dan evaluasi metode RAG FTMM COMPASS. LLM bisa memakai model lokal (Ollama) atau Gemini API.
-Knowledge base disalin dari aplikasi (`E:\IRIS_longterm\1`).
+UI chatbot dan evaluasi metode RAG FTMM COMPASS. LLM bisa memakai 9Router (OpenAI-compatible, lewat tunnel tim), model lokal (Ollama), atau Gemini API.
+Knowledge base berasal dari tim (`Dataset Matkul Prodi` di Drive: 5 JSON kurikulum + panduan regulasi); ground truth diturunkan dari `gt_master.json` repo chatbot.
 
 - **Mode Chat Bebas**: bertanya apa saja, riwayat tersimpan ke `chat_logs/chat_history.csv`.
 - **Mode Evaluasi Ground Truth**: soal `GT_MASTER.csv` (449) dijawab otomatis, lalu dinilai dengan BERTScore dan ROUGE.
@@ -9,44 +9,53 @@ Knowledge base disalin dari aplikasi (`E:\IRIS_longterm\1`).
 
 ## Instalasi
 
-Jalankan dari `E:\IRIS_longterm\RAG`. Cache diarahkan ke drive E karena drive C hampir penuh.
+WSL2/Linux, Python >= 3.12, `uv`.
 
 ```
-set UV_CACHE_DIR=E:\IRIS_longterm\.uv-cache
-python -m uv sync
+uv sync
 ```
-
-Di jendela CMD baru, `set UV_CACHE_DIR=...` perlu dijalankan lagi kalau daftar paket berubah.
 
 Periksa hasilnya; semua test harus lolos:
 
 ```
-python -m uv run pytest
+uv run pytest
 ```
+
+Kalau cache uv memenuhi disk, arahkan ke disk lain: `UV_CACHE_DIR=/path/ke/disk/lain uv sync`.
+
+### Memakai 9Router (jalur tim)
+
+Akses LLM tim memakai tunnel, bukan `localhost`: kalau tunnel mati, kondisi yang terlihat sama untuk semua orang.
+
+1. Salin `.env.example` menjadi `.env`.
+2. Isi `NINE_ROUTER_API_KEY=` dengan key dari dashboard 9router. Kunci Google Gemini ditolak.
+3. `NINE_ROUTER_HOST` dan `NINE_ROUTER_MODEL` sudah terisi default tim; model wajib memakai prefix provider (`ag/...`).
+4. Pilih `9Router (OpenAI-compatible)` di sidebar.
+
+Pertanyaan dan potongan knowledge base dikirim ke 9Router. Embedding tetap memakai model lokal, jadi metode selain BM25 tetap membutuhkan Ollama.
 
 ### Memakai Gemini (opsional)
 
-1. Salin `.env.example` menjadi `.env`.
-2. Isi `GEMINI_API_KEY=` dengan API key. Jangan membagikan file `.env`.
+1. Isi `GEMINI_API_KEY=` di `.env`. Jangan membagikan file `.env`.
+2. Pilih `Gemini API` di sidebar.
 
 Pertanyaan dan potongan knowledge base akan dikirim ke server Google. Pastikan ini diizinkan untuk data internal FTMM.
-Embedding tetap memakai model lokal, jadi metode selain BM25 tetap membutuhkan Ollama.
 
 ### Memakai LLM lokal
 
-`ollama list` harus menampilkan `llama3.2:3b`. Kalau modelnya tidak terbaca, tutup Ollama lalu buka lagi
-agar membaca `E:\Ollama_models`.
+`ollama list` harus menampilkan `llama3.2:3b` (atau nilai `LLM_MODEL_NAME`). Kalau daemon tidak terbaca, cek `OLLAMA_HOST`
+dan pastikan layanan Ollama aktif, lalu muat ulang halaman.
 
 ## Menjalankan
 
 1. Buat index Dense. Wajib untuk metode selain BM25, dan diulang setiap kali knowledge base berubah.
    Butuh `nomic-embed-text-v2-moe` di Ollama.
    ```
-   python -m uv run python build_index.py
+   uv run python build_index.py
    ```
-2. Jalankan UI, lalu buka http://localhost:8501
+2. Jalankan UI, lalu buka http://127.0.0.1:8501
    ```
-   python -m uv run streamlit run app.py
+   uv run streamlit run app.py
    ```
 
 ## Evaluasi Ground Truth
@@ -83,13 +92,32 @@ Saat menafsirkan hasil:
 
 - Semua soal silabus menyebut kode MK, sehingga BM25 diuntungkan. Untuk membandingkan metode retrieval,
   gunakan juga `run_bm25.py` dengan `ir_eval_dataset.json` dan `retrieval_complexity_benchmark.json`.
-- Jawaban acuan silabus dibuat dari template katalog, dan 7 pertanyaan muncul dua kali di GT.
+- Jawaban acuan silabus dibuat dari template katalog, dan ada 7 baris duplikat di GT: 3 pertanyaan `Silabus Wajib` muncul dua kali dan 2 muncul tiga kali. Sampel 449 baris tidak sepenuhnya independen.
 - Jawaban yang benar tapi memakai kata lain mendapat ROUGE rendah. BERTScore lebih tepat untuk parafrasa.
 - BERTScore dan ROUGE tidak mendeteksi jawaban yang terdengar benar tapi tidak didukung konteks.
 
+## Ledger
+
+`scripts/ledger.py` merangkum `results/` menjadi `docs/ledger/RUNS.md` dan `docs/ledger/runs.csv`. Isinya agregat per run:
+metode, provider/model, top-k, n, metrik, commit, hash ground truth, dan tautan arsip Drive.
+
+```
+uv run python scripts/ledger.py
+```
+
+Teks pertanyaan, jawaban, jawaban acuan, konteks, dan `traces.jsonl` tidak ikut disalin. Hasil mentah tetap di `results/`
+dan dibagikan lewat Drive, bukan git. Aturan lengkap ada di `docs/ledger/README.md`.
+
 ## Pengaturan
 
-Bisa diisi di `.env`: `GEMINI_API_KEY`, `GEMINI_MODEL_NAME`, `LLM_MODEL_NAME`, `EMBED_MODEL_NAME`.
+Bisa diisi di `.env`:
+
+| Variabel | Fungsi |
+|---|---|
+| `NINE_ROUTER_HOST`, `NINE_ROUTER_MODEL`, `NINE_ROUTER_API_KEY` | Provider utama tim lewat tunnel |
+| `GEMINI_API_KEY`, `GEMINI_MODEL_NAME` | Provider pembanding langsung ke Google |
+| `LLM_MODEL_NAME`, `EMBED_MODEL_NAME`, `OLLAMA_HOST` | LLM lokal dan embedding |
+
 Model LLM juga bisa diganti di sidebar. Index harus dibuat ulang setelah mengganti model embedding.
 
 ## Isi folder
@@ -98,18 +126,21 @@ Model LLM juga bisa diganti di sidebar. Index harus dibuat ulang setelah menggan
 |---|---|
 | `app.py` | UI Streamlit |
 | `build_index.py` | Membuat index Dense |
-| `run_bm25.py` | Evaluasi retrieval BM25 |
+| `run_bm25.py` | Evaluasi retrieval BM25 (`--output`, `--limit`) |
+| `scripts/ledger.py` | Menyusun ledger agregat dari `results/` |
 | `lib/` | Knowledge base, retriever, LLM, log CSV, evaluasi, metrik |
-| `knowledge_base/` | 5 file kurikulum (369 MK) dan `regulasi/` (262 butir), salinan dari folder `1` |
-| `ground_truth/` | Kunci jawaban evaluasi, bukan knowledge base |
+| `tests/` | Test pytest (retrieval, evaluasi, provider, ledger) |
+| `docs/ledger/` | Ledger agregat; satu-satunya artefak evaluasi yang di-commit |
+| `knowledge_base/` | 5 file kurikulum (369 MK) dan `regulasi/` (262 butir) dari tim |
+| `ground_truth/` | `GT_MASTER.csv` (449 soal) dan dataset retrieval; turunan `gt_master.json` |
 | `index/`, `chat_logs/`, `results/`, `.hf_cache/` | Dibuat otomatis saat program berjalan |
 
 Yang disamakan dengan aplikasi: format chunk kurikulum dan regulasi, opsi LLM lokal `PureRAGEngine`, tokenizer dan
 parameter BM25, RRF k=60, serta prompt reformulasi.
 
 Yang berbeda: kurikulum dan regulasi dicari dalam satu index (di aplikasi terpisah), prompt sistem menyebut regulasi,
-pencarian Dense memakai NumPy (hasil setara `IndexFlatIP`), batas keluaran Gemini 2.048 token karena token thinking ikut
-terhitung (lokal 512), dan ada filter prodi opsional.
+pencarian Dense memakai NumPy (hasil setara `IndexFlatIP`), batas keluaran 9Router 512 token mengikuti `PureRAGEngine`,
+batas Gemini 2.048 token karena token thinking ikut terhitung, dan ada filter prodi opsional.
 
 Batasan: kueri lanjutan seperti "prasyaratnya apa?" dicari apa adanya, sama seperti `PureRAGEngine`.
 
@@ -117,3 +148,6 @@ Batasan: kueri lanjutan seperti "prasyaratnya apa?" dicari apa adanya, sama sepe
 
 `.env`, `knowledge_base/`, `ground_truth/`, `index/`, `chat_logs/`, dan `results/` sudah masuk `.gitignore`.
 Jangan diunggah ke repositori publik.
+
+Repo ini publik. Satu-satunya artefak evaluasi yang boleh di-commit adalah `docs/ledger/` (agregat, tanpa teks soal atau
+jawaban). Hasil mentah dibagikan lewat Google Drive tim.
