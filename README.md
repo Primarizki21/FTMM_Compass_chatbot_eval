@@ -61,6 +61,20 @@ Akses LLM tim memakai tunnel, bukan `localhost`: kalau tunnel mati, kondisi yang
 3. Salin `NINE_ROUTER_HOST` dan `NINE_ROUTER_MODEL` dari tim ke `.env`; model wajib memakai prefix provider (`ag/...`).
 4. Pilih `9Router (OpenAI-compatible)` di sidebar.
 
+Cek tunnel sebelum menjalankan run:
+
+```bash
+set -a; . ./.env; set +a
+host=$(printf '%s' "${NINE_ROUTER_HOST%/}" | sed 's#/v1$##')
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $NINE_ROUTER_API_KEY" "$host/v1/models"
+```
+
+- `200`: host dan key valid, siap dipakai.
+- `401`: tunnel hidup, key ditolak atau kosong. Periksa `NINE_ROUTER_API_KEY`.
+- Timeout atau `ConnectError`: tunnel mati. Laporkan ke tim; jangan pindah ke `localhost`.
+- `404` saat memanggil model: `NINE_ROUTER_MODEL` tidak memakai prefix provider (`ag/...`).
+
 Pertanyaan dan potongan knowledge base dikirim ke 9Router. Embedding tetap memakai model lokal, jadi metode selain BM25 tetap membutuhkan Ollama.
 
 ### Memakai Gemini (opsional)

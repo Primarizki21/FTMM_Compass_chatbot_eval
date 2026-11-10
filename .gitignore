@@ -9,6 +9,9 @@ results/
 .env
 .hf_cache/
 
+# Paper retrieval (PDF + transkrip berhak cipta, tidak untuk repo publik)
+papers/
+
 # Local AI agent instructions & graph indexes (developer-local, bukan milik tim)
 AGENTS.md
 CLAUDE.md
