@@ -1,12 +1,13 @@
-"""Membuat ulang index Dense dari knowledge_base/. Jalankan sekali, dan setiap kali knowledge base berubah."""
+"""Membuat ulang index Dense dari knowledge_base/, opsional ditambah web_kb/."""
 
+import argparse
 import json
 import sys
 
 import numpy as np
 
 from lib import llm
-from lib.kb import load_documents
+from lib.kb import WEB_DIR, load_documents
 from lib.rag import INDEX_DIR, corpus_hash, index_paths
 
 BATCH_SIZE = 32
@@ -14,7 +15,11 @@ BATCH_SIZE = 32
 
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
-    courses = load_documents()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--web", action="store_true", help="Sertakan web_kb/pages.jsonl")
+    args = parser.parse_args()
+
+    courses = load_documents(web_dir=WEB_DIR if args.web else None)
     chunks = [course.chunk for course in courses]
     print(f"Membuat embedding {len(chunks)} dokumen dengan {llm.EMBED_MODEL} ...")
 

@@ -16,6 +16,22 @@ PRODI_BY_ACRONYM = {
 }
 
 
+WEB_DIR = ROOT / "web_kb"
+
+# Halaman web tidak selalu menyebut nama prodi dalam Bahasa Indonesia; alias ini hanya untuk inferensi.
+PRODI_ALIASES = {
+    "Teknologi Sains Data": ("teknologi sains data", "data science"),
+    "Teknik Robotika dan Kecerdasan Buatan": (
+        "teknik robotika",
+        "robotika dan kecerdasan buatan",
+        "robotics and artificial intelligence",
+    ),
+    "S1 Rekayasa Nanoteknologi": ("rekayasa nanoteknologi", "nanoteknologi", "nanotechnology"),
+    "Teknik Industri": ("teknik industri", "industrial engineering"),
+    "Teknik Elektro": ("teknik elektro", "electrical engineering"),
+}
+
+
 REGULATION_SOURCES = [
     ("panduanskripsi.json", "skripsi", "Panduan Skripsi FTMM UNAIR"),
     ("panduanpkl.json", "pkl", "Panduan PKL FTMM UNAIR"),
@@ -115,8 +131,56 @@ def load_regulations(kb_dir: Path = KB_DIR) -> list[Course]:
     return documents
 
 
-def load_documents(kb_dir: Path = KB_DIR) -> list[Course]:
-    return load_courses(kb_dir) + load_regulations(kb_dir)
+def infer_prodi(judul: str, slug: str) -> str:
+    """Tebak prodi dari judul/slug halaman web; kosong berarti berlaku untuk fakultas."""
+    haystack = f"{judul} {slug}".lower().replace("-", " ")
+    for prodi, aliases in PRODI_ALIASES.items():
+        if any(alias in haystack for alias in aliases):
+            return prodi
+    return ""
+
+
+def format_web_chunk(page: dict) -> str:
+    prodi = page.get("prodi") or "Fakultas"
+    jenis = "Berita" if page.get("tipe") == "post" else "Halaman"
+    tanggal = (page.get("modified") or page.get("tanggal") or "")[:10]
+    return (
+        f"[INFORMASI WEB FTMM]\n"
+        f"Jenis: {jenis} | Program Studi: {prodi}\n"
+        f"Judul: {page.get('judul', '')}\n"
+        f"Sumber: {page.get('url', '')}\n"
+        f"Diperbarui: {tanggal}\n"
+        f"Isi: {page.get('teks', '')}"
+    ).strip()
+
+
+def load_web_pages(web_dir: Path = WEB_DIR) -> list[Course]:
+    """Muat hasil scraping web_kb/pages.jsonl sebagai korpus terpisah dari knowledge_base/."""
+    path = web_dir / "pages.jsonl"
+    if not path.exists():
+        raise FileNotFoundError(f"Hasil scraping web belum ada di {path}. Jalankan: uv run python scripts/scrape_ftmm.py")
+    documents = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        page = json.loads(line)
+        if page.get("status") != "ok":
+            continue
+        documents.append(
+            Course(
+                kode=f"WEB-{page.get('tipe', 'page')}-{page.get('id')}",
+                nama=page.get("judul", ""),
+                prodi=page.get("prodi", ""),
+                chunk=format_web_chunk(page),
+                sumber=page.get("url", ""),
+            )
+        )
+    return documents
+
+
+def load_documents(kb_dir: Path = KB_DIR, web_dir: Path | None = None) -> list[Course]:
+    documents = load_courses(kb_dir) + load_regulations(kb_dir)
+    if web_dir is not None:
+        documents += load_web_pages(web_dir)
+    return documents
 
 
 def load_courses(kb_dir: Path = KB_DIR) -> list[Course]:

@@ -27,6 +27,37 @@ uv sync
 Tanpa keduanya aplikasi gagal memuat dokumen dan sebagian test gagal karena data tidak ada, bukan karena bug kode.
 Ground truth diturunkan dari repo chatbot: `data/ground_truth/gt_master.json` dengan kolom `id, question, answer, source_id, source_type`.
 
+### Data web FTMM (terisolasi)
+
+Informasi publik `ftmm.unair.ac.id` masuk ke `web_kb/`, bukan `knowledge_base/`:
+
+```
+web_kb/
+├── pages.jsonl      # satu baris = satu halaman/berita: URL, judul, teks, prodi, hash
+├── manifest.json    # provenance: UA, delay, jumlah, hash konten, commit
+├── log.jsonl        # satu baris = satu request HTTP: status, byte, detik, hasil
+└── raw/             # cache respons REST per halaman; dipakai ulang saat resume
+```
+
+Perintah:
+
+```
+uv run python scripts/scrape_ftmm.py --dry-run --delay 8   # cek akses + jumlah dokumen
+uv run python scripts/scrape_ftmm.py --delay 4             # semua halaman dan berita
+uv run python build_index.py --web                          # index Dense dengan web
+uv run python run_bm25.py --web                             # benchmark dengan web
+FTMM_WEB=1 uv run streamlit run app.py                      # UI dengan web
+```
+
+Situs memblokir burst request dengan balasan HTTP 200 berisi halaman penolakan. Skrip mendeteksinya,
+berhenti, dan memakai ulang `raw/`. Blokir bersifat per-IP dan bisa bertahan lebih dari 20 menit:
+ulangi paling cepat 30 menit setelah request terakhir. `--delay` minimal 4 detik. `--since YYYY-MM-DD` membatasi berita
+berdasarkan `modified`, `--limit N` membatasi dokumen per jenis.
+
+Web tidak masuk `load_documents()` secara default: korpus berubah berarti `corpus_hash` berubah dan
+index Dense lama batal. Aktifkan hanya dengan `--web` atau `FTMM_WEB=1`. Prodi halaman ditebak dari
+judul/slug; kosong berarti berlaku untuk fakultas.
+
 Setelah data lengkap, periksa hasilnya; semua test harus lolos:
 
 ```
@@ -48,6 +79,7 @@ Opsional. Butuh `make` (tersedia di Linux, macOS, WSL2). Di Windows tanpa `make`
 | `make run` atau `make streamlit` | Jalankan UI |
 | `make bm25` | Benchmark retrieval BM25 tanpa LLM |
 | `make ledger` | Susun ledger agregat dari `results/` |
+| `make scrape` | Ambil informasi web FTMM ke `web_kb/` |
 | `make clean-index` | Hapus index Dense agar dibuat ulang |
 
 Model embedding mengikuti `EMBED_MODEL_NAME`. Ganti model = jalankan `make index` sekali; berkas model lama tetap ada di `index/` dan bisa dihapus manual.
