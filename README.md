@@ -33,21 +33,34 @@ Informasi publik `ftmm.unair.ac.id` masuk ke `web_kb/`, bukan `knowledge_base/`:
 
 ```
 web_kb/
-├── pages.jsonl      # satu baris = satu halaman/berita: URL, judul, teks, prodi, hash
-├── manifest.json    # provenance: UA, delay, jumlah, hash konten, commit
-├── log.jsonl        # satu baris = satu request HTTP: status, byte, detik, hasil
-└── raw/             # cache respons REST per halaman; dipakai ulang saat resume
+├── pages.jsonl        # satu baris = satu halaman/berita: URL, judul, teks, prodi, hash, mesin
+├── urls.jsonl         # daftar URL dari sitemap Yoast setelah filter bahasa/arsip
+├── graf.jsonl         # edge tautan: dari, ke, anchor, jenis
+├── media.jsonl        # PDF/gambar yang dirujuk beserta halaman sumber
+├── render_queue.jsonl # halaman tipis yang perlu render browser
+├── manifest.json      # provenance: UA, delay, jumlah, sitemap, hash konten, commit
+├── log.jsonl          # satu baris = satu request HTTP: status, byte, detik, hasil, cache
+├── raw/               # cache respons REST dan sitemap; dipakai ulang saat resume
+└── raw_browser/       # dump hasil render browser (lihat scripts/import_browser_dump.py)
 ```
 
 Perintah:
 
 ```
 uv run python scripts/scrape_ftmm.py --dry-run --delay 8   # cek akses + jumlah dokumen
-uv run python scripts/scrape_ftmm.py --delay 4             # semua halaman dan berita
+uv run python scripts/scrape_ftmm.py --delay 4             # semua halaman, berita, dan CPT publik
+uv run python scripts/scrape_ftmm.py --jenis pages,posts   # hanya dua jenis itu
+uv run python scripts/import_browser_rest.py               # susun web_kb dari dump REST browser
+uv run python scripts/import_browser_dump.py               # gabungkan hasil render browser
 uv run python build_index.py --web                          # index Dense dengan web
 uv run python run_bm25.py --web                             # benchmark dengan web
 FTMM_WEB=1 uv run streamlit run app.py                      # UI dengan web
 ```
+
+Stack situs: WordPress + Elementor/ElementsKit, LiteSpeed Cache, Yoast SEO, EventOn, GTranslate,
+DataTables. Karena konten Elementor sudah dirender server, teks diambil dari REST lebih dulu;
+browser hanya dipakai untuk halaman tipis atau tabel AJAX (`render_queue.jsonl`). Header cache
+LiteSpeed dicatat di `log.jsonl`; URL berprefix bahasa GTranslate tidak diikuti.
 
 Situs memblokir burst request dengan balasan HTTP 200 berisi halaman penolakan. Skrip mendeteksinya,
 berhenti, dan memakai ulang `raw/`. Blokir bersifat per-IP dan bisa bertahan lebih dari 20 menit:

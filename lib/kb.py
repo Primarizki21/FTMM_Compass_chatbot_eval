@@ -166,7 +166,7 @@ def load_web_pages(web_dir: Path = WEB_DIR) -> list[Course]:
             continue
         documents.append(
             Course(
-                kode=f"WEB-{page.get('tipe', 'page')}-{page.get('id')}",
+                kode=f"WEB-{page.get('tipe', 'page')}-{page.get('id') or page.get('slug', '')}",
                 nama=page.get("judul", ""),
                 prodi=page.get("prodi", ""),
                 chunk=format_web_chunk(page),

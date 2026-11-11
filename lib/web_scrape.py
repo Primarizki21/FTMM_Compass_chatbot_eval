@@ -18,8 +18,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.robotparser import RobotFileParser
+from xml.etree import ElementTree
 
 from lib.kb import infer_prodi
+from lib.web_crawl import classify, extract_images, extract_links, needs_render
 
 BASE = "https://ftmm.unair.ac.id"
 DEFAULT_UA = (
@@ -30,6 +32,22 @@ DEFAULT_DELAY = 4.0
 PER_PAGE = 100
 FIELDS = "id,slug,link,date,modified,title,content,excerpt"
 JENIS = ("pages", "posts")
+TIPE_BY_BASE = {"posts": "post", "ajde_events": "event"}
+TYPES_DENY = {
+    "attachment",
+    "nav_menu_item",
+    "wp_block",
+    "wp_template",
+    "wp_template_part",
+    "wp_navigation",
+    "wp_font_family",
+    "wp_font_face",
+    "elementor_library",
+    "custom_css",
+    "customize_changeset",
+    "oembed_cache",
+    "user_request",
+}
 BLOCK_MARKER = "requested url was rejected"
 SKIP_TAGS = frozenset({"script", "style", "noscript", "svg", "iframe", "template"})
 BLOCK_TAGS = frozenset(
@@ -65,7 +83,9 @@ def is_blocked(body: bytes, content_type: str, expect: str = "json") -> bool:
     if "html" not in content_type.lower():
         return False
     text = body[:2000].decode("utf-8", "ignore").lower()
-    return BLOCK_MARKER in text or (expect == "json" and len(body) <= 300)
+    return any(marker in text for marker in ("requested url was rejected", "request rejected")) or (
+        expect == "json" and len(body) <= 300
+    )
 
 
 def robots_allows(robots_text: str, path: str, user_agent: str = "FTMM-Compass-Eval") -> bool:
@@ -90,7 +110,16 @@ class Fetcher:
         with urlopen(Request(url, headers=headers), timeout=timeout) as response:
             return response.status, dict(response.headers.items()), response.read()
 
-    def _log(self, path: str, status: int, size: int, elapsed: float, hasil: str, pesan: str = "") -> None:
+    def _log(
+        self,
+        path: str,
+        status: int,
+        size: int,
+        elapsed: float,
+        hasil: str,
+        pesan: str = "",
+        extra: dict | None = None,
+    ) -> None:
         if self.log_path is None:
             return
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -104,6 +133,8 @@ class Fetcher:
         }
         if pesan:
             entry["pesan"] = pesan
+        if extra:
+            entry.update({k: v for k, v in extra.items() if v})
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
@@ -149,7 +180,9 @@ class Fetcher:
                 self._log(path, status, len(body), elapsed, "blokir", "WAF menolak request")
                 raise WafBlocked(f"WAF menolak {path}. Berhenti, ulangi setelah jeda.")
 
-            self._log(path, status, len(body), elapsed, "ok")
+            cache = header(response_headers, "x-litespeed-cache")
+            age = header(response_headers, "age")
+            self._log(path, status, len(body), elapsed, "ok", extra={"cache": cache, "umur_cache": age})
             return body
 
         raise AssertionError("tidak mungkin")
@@ -194,10 +227,11 @@ def parse_item(item: dict, tipe: str) -> dict:
     slug = item.get("slug", "")
     content = item.get("content", {}).get("rendered", "") or item.get("excerpt", {}).get("rendered", "")
     teks = html_to_text(str(content))
+    url = item.get("link", "")
     return {
         "id": item.get("id"),
-        "tipe": "post" if tipe == "posts" else "page",
-        "url": item.get("link", ""),
+        "tipe": TIPE_BY_BASE.get(tipe, "page"),
+        "url": url,
         "slug": slug,
         "judul": judul,
         "tanggal": item.get("date", ""),
@@ -209,8 +243,55 @@ def parse_item(item: dict, tipe: str) -> dict:
         "hash_teks": hashlib.sha256(teks.encode("utf-8")).hexdigest(),
         "diambil_pada": item.get("_diambil", ""),
         "sumber_raw": item.get("_sumber_raw", ""),
+        "links": extract_links(str(content), url),
+        "gambar": extract_images(str(content), url),
         "status": "ok" if teks else "kosong",
+        "perlu_render": needs_render(teks, str(content)),
     }
+
+
+def parse_sitemap(body: bytes) -> tuple[list[str], list[str]]:
+    """Kembalikan (url, sub_sitemap) dari urlset atau sitemapindex."""
+    root = ElementTree.fromstring(body)
+    urls = [(element.findtext("{*}loc") or "").strip() for element in root.findall("{*}url")]
+    sitemaps = [(element.findtext("{*}loc") or "").strip() for element in root.findall("{*}sitemap")]
+    return [url for url in urls if url], [url for url in sitemaps if url]
+
+
+def collect_sitemap_urls(fetcher: Fetcher, cache_dir: Path, max_sitemaps: int = 30) -> dict:
+    """Baca sitemap_index.xml Yoast dan semua sub-sitemap; simpan body mentah di cache_dir."""
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    body = fetcher.get("/sitemap_index.xml", expect="text")
+    (cache_dir / "sitemap-index.xml").write_bytes(body)
+    _, children = parse_sitemap(body)
+
+    urls: list[str] = []
+    terbaca: list[str] = []
+    for child in children[:max_sitemaps]:
+        name = child.rsplit("/", 1)[-1] or "sitemap.xml"
+        cache = cache_dir / name
+        if cache.exists():
+            payload = cache.read_bytes()
+        else:
+            payload = fetcher.get("/" + name, expect="text")
+            cache.write_bytes(payload)
+        page_urls, _ = parse_sitemap(payload)
+        urls.extend(page_urls)
+        terbaca.append(name)
+
+    unik = sorted({url for url in urls if classify(url) == "page"})
+    return {"urls": unik, "sitemaps": terbaca, "jumlah_url": len(unik), "jumlah_mentah": len(urls)}
+
+
+def public_types(fetcher: Fetcher) -> list[str]:
+    """Rest base dari tipe konten publik; menyertakan CPT seperti EventOn bila terekspos."""
+    data = json.loads(fetcher.get("/wp-json/wp/v2/types"))
+    bases = []
+    for slug, info in data.items():
+        base = info.get("rest_base") or slug
+        if slug not in TYPES_DENY:
+            bases.append(base)
+    return bases
 
 
 def enumerate_items(
