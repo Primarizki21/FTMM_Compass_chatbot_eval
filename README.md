@@ -53,6 +53,7 @@ uv run python scripts/scrape_ftmm.py --delay 4             # semua halaman, beri
 uv run python scripts/scrape_ftmm.py --jenis pages,posts   # hanya dua jenis itu
 uv run python scripts/import_browser_rest.py               # susun web_kb dari dump REST browser
 uv run python scripts/import_browser_dump.py               # gabungkan hasil render browser
+uv run python scripts/categorize_web_kb.py                 # JSON per kategori di web_kb_categorized/
 uv run python build_index.py --web                          # index Dense dengan web
 uv run python run_bm25.py --web                             # benchmark dengan web
 FTMM_WEB=1 uv run streamlit run app.py                      # UI dengan web

@@ -64,6 +64,23 @@ Skema baris `pages.jsonl`:
 }
 ```
 
+### 2.1 Artefak kategori (turunan)
+
+`scripts/categorize_web_kb.py` membaca `web_kb/pages.jsonl`, membuang URL duplikat
+(ambil teks terpanjang), menormalkan judul/teks, lalu menulis satu JSON per kategori
+ke `web_kb_categorized/` (gitignored):
+
+```bash
+uv run python scripts/categorize_web_kb.py
+```
+
+Setiap dokumen berisi `id, tipe, kategori, dasar_kategori, judul, url, slug, tanggal,
+modified, prodi, jumlah_karakter, hash_teks, teks`. `manifest.json` mencatat jumlah per
+kategori, jumlah baris yang dibuang, dan aturan klasifikasi. Kategori: `akademik`,
+`program_studi`, `profil_staf`, `profil_fakultas`, `kemahasiswaan`, `prestasi`,
+`penelitian`, `pengabdian`, `kerjasama`, `fasilitas`, `regulasi`, `mutu`, `agenda`,
+`sdgs`, `dokumen_resmi`, `faq`, `berita`, `lainnya`.
+
 ## 3. Alur yang terbukti
 
 ### 3.1 Buka tab dan probe
