@@ -29,7 +29,8 @@ Ground truth diturunkan dari repo chatbot: `data/ground_truth/gt_master.json` de
 
 ### Data web FTMM (terisolasi)
 
-Informasi publik `ftmm.unair.ac.id` masuk ke `web_kb/`, bukan `knowledge_base/`:
+Informasi publik `ftmm.unair.ac.id` masuk ke `web_kb/`, bukan `knowledge_base/`. Cara lengkap
+(jalur browser, snippet, jebakan WAF, skema) ada di [`docs/web-scraping.md`](docs/web-scraping.md):
 
 ```
 web_kb/
