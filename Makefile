@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help sync test index run streamlit bm25 ledger clean-index
+.PHONY: help sync test index run streamlit bm25 ledger scrape kategori clean-index
 
 help: ## Tampilkan daftar perintah
 	@grep -E '^[a-z0-9][a-z0-9 -]*:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -22,6 +22,12 @@ bm25: ## Benchmark retrieval BM25 tanpa LLM
 
 ledger: ## Susun ledger agregat dari results/
 	uv run python scripts/ledger.py
+
+scrape: ## Ambil informasi web FTMM ke web_kb/ (konservatif)
+	uv run python scripts/scrape_ftmm.py --delay 4
+
+kategori: ## Rapikan web_kb/pages.jsonl menjadi JSON per kategori
+	uv run python scripts/categorize_web_kb.py
 
 clean-index: ## Hapus index Dense (dibuat ulang dengan make index)
 	rm -f index/*.npy index/*.json

@@ -6,6 +6,8 @@ ground_truth/
 index/
 chat_logs/
 results/
+web_kb/
+web_kb_categorized/
 .env
 .hf_cache/
 

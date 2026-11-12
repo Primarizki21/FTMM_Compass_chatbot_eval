@@ -1,6 +1,7 @@
 """UI chatbot RAG FTMM COMPASS dengan dua mode: chat bebas dan evaluasi ground truth."""
 
 import json
+import os
 import time
 from datetime import datetime
 from uuid import uuid4
@@ -8,7 +9,7 @@ from uuid import uuid4
 import streamlit as st
 
 from lib import chat_log, gt_eval, llm, rag
-from lib.kb import PRODI_BY_ACRONYM, load_documents
+from lib.kb import PRODI_BY_ACRONYM, WEB_DIR, load_documents
 
 MODE_CHAT = "Chat Bebas"
 MODE_EVAL = "Evaluasi Ground Truth"
@@ -21,7 +22,8 @@ st.set_page_config(page_title="Compass AI - RAG", page_icon="🧭", layout="wide
 
 @st.cache_resource
 def get_retriever() -> rag.CourseRetriever:
-    return rag.CourseRetriever(load_documents())
+    web_dir = WEB_DIR if os.environ.get("FTMM_WEB") == "1" else None
+    return rag.CourseRetriever(load_documents(web_dir=web_dir))
 
 
 def start_new_chat() -> None:
