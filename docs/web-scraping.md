@@ -64,22 +64,51 @@ Skema baris `pages.jsonl`:
 }
 ```
 
-### 2.1 Artefak kategori (turunan)
+### 2.1 Artefak kategori dan unit retrieval (turunan)
 
-`scripts/categorize_web_kb.py` membaca `web_kb/pages.jsonl`, membuang URL duplikat
-(ambil teks terpanjang), menormalkan judul/teks, lalu menulis satu JSON per kategori
-ke `web_kb_categorized/` (gitignored):
+`scripts/categorize_web_kb.py` membaca `web_kb/pages.jsonl`, membuang URL/hash duplikat,
+menormalkan judul/teks, lalu menulis ke `web_kb_categorized/` (gitignored):
 
 ```bash
 uv run python scripts/categorize_web_kb.py
 ```
 
-Setiap dokumen berisi `id, tipe, kategori, dasar_kategori, judul, url, slug, tanggal,
-modified, prodi, jumlah_karakter, hash_teks, teks`. `manifest.json` mencatat jumlah per
-kategori, jumlah baris yang dibuang, dan aturan klasifikasi. Kategori: `akademik`,
-`program_studi`, `profil_staf`, `profil_fakultas`, `kemahasiswaan`, `prestasi`,
-`penelitian`, `pengabdian`, `kerjasama`, `fasilitas`, `regulasi`, `mutu`, `agenda`,
+Keluaran:
+
+- `<kategori>.json` — dokumen utuh per kategori. Field: `id, tipe, kategori, dasar_kategori,
+  judul, url, slug, tanggal, modified, prodi, jumlah_karakter, hash_teks, arsip, sifat,
+  dipakai_kb, alasan_tidak_kb, teks`.
+- `chunks.jsonl` — unit yang dipakai retriever. Field: `chunk_id, induk_id, tipe, kategori,
+  dasar_kategori, judul, url, prodi, tanggal, modified, halaman, jenis_unit, jumlah_karakter,
+  dipakai_kb, teks`.
+- `manifest.json` — jumlah dokumen/chunk, arsip, aturan klasifikasi.
+
+Aturan bentuk data:
+
+- PDF dipecah per halaman (form feed dipertahankan); halaman panjang dipotong ~1.200 karakter.
+- FAQ dipecah per pertanyaan; label filter (`Lokasi`, `Akun`, ...) dibuang dari awal pertanyaan.
+- Teks panjang dipotong pada batas paragraf/kalimat.
+- `sifat=statis` untuk halaman, dokumen resmi, profil staf, info prodi, dan regulasi;
+  `berita`/`agenda` tetap `dinamis`.
+- `dipakai_kb` hanya untuk dokumen statis yang relevan: laporan administratif (anggaran,
+  inventaris, kontrak kinerja, maklumat) tidak dipakai. Duplikat judul/nama staf disimpan satu.
+- `alasan_tidak_kb` menjelaskan kenapa dokumen di luar KB: `dinamis`, `arsip`, `administratif`,
+  atau `duplikat judul`.
+- Halaman daftar isi dan potongan non-teks dibuang dari `chunks.jsonl`.
+- Edisi lama buku/panduan (2020–2023) ditandai `arsip` dan tidak dipakai KB; semua tetap tersimpan.
+
+Kategori: `akademik`, `program_studi`, `profil_staf`, `profil_fakultas`, `kemahasiswaan`,
+`prestasi`, `penelitian`, `pengabdian`, `kerjasama`, `fasilitas`, `regulasi`, `mutu`, `agenda`,
 `sdgs`, `dokumen_resmi`, `faq`, `berita`, `lainnya`.
+
+Dataset evaluasi retrieval diturunkan dari `chunks.jsonl`:
+
+```bash
+uv run python scripts/build_web_eval.py   # silver: web_kb_categorized/web_eval.jsonl
+uv run python scripts/build_web_gold.py   # gold: web_kb_categorized/web_eval_gold.jsonl
+uv run python scripts/run_web_eval.py     # results/web_eval/<metode>/
+uv run python scripts/run_web_eval.py --dataset web_kb_categorized/web_eval_gold.jsonl
+```
 
 ## 3. Alur yang terbukti
 
@@ -241,6 +270,10 @@ uv run pytest -q                                   # TEST DONE
 uv run python scripts/import_browser_rest.py       # [OK] N dokumen ...
 uv run python scripts/import_browser_dump.py       # [OK] N dokumen (ditambah=..., diganti=...)
 uv run python scripts/scrape_ftmm.py --dry-run --delay 8   # hanya untuk jalur HTTP; akan [FAIL] bila WAF
+uv run python scripts/categorize_web_kb.py         # [OK] N dokumen, M chunk
+uv run python scripts/build_web_eval.py            # [OK] N kueri silver
+uv run python scripts/build_web_gold.py            # [OK] N kueri gold
+uv run python scripts/run_web_eval.py              # tabel metrik per kategori
 ```
 
 Cek cepat data:
@@ -248,6 +281,7 @@ Cek cepat data:
 ```bash
 python3 -c "import json;rows=[json.loads(l) for l in open('web_kb/pages.jsonl')];print(len(rows),sum(r['status']=='ok' for r in rows))"
 python3 -c "import json;m=json.load(open('web_kb/manifest.json'));print(m['jumlah_dokumen'],m['jumlah_kosong'],m['graf'])"
+python3 -c "import json;m=json.load(open('web_kb_categorized/manifest.json'));print(m['jumlah_dokumen'],m['jumlah_statis'],m['jumlah_chunk'])"
 ```
 
 ## 7. Data yang berhasil (run 2026-11-11)
@@ -269,13 +303,15 @@ Trace: `pimpinan-fakultas` → 4 edge profil; `staf-dosen-prodi-*` → 52 edge p
 ## 8. Integrasi retrieval
 
 ```bash
+uv run python scripts/categorize_web_kb.py  # wajib sebelum --web
 uv run python build_index.py --web          # butuh Ollama hidup
 uv run python run_bm25.py --web             # tanpa Ollama
 FTMM_WEB=1 uv run streamlit run app.py
 ```
 
-`load_web_pages()` membaca `pages.jsonl`, melewati `status != ok`, dan memberi `prodi` hasil
-inferensi/warisan. `load_documents()` tetap default tanpa web agar `corpus_hash` eval lama tidak berubah.
+`load_web_categorized()` membaca `chunks.jsonl` dan hanya memuat unit dengan `dipakai_kb`;
+`semua=True` ikut memuat berita/agenda untuk eksperimen. `load_documents()` tetap default tanpa
+web agar `corpus_hash` eval lama tidak berubah.
 
 ## 9. Gap yang masih terbuka
 
