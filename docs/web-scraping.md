@@ -175,7 +175,8 @@ const EXTRACT = `(() => {
 await tab.goto(url);
 await new Promise((r) => setTimeout(r, 1500));
 const data = await tab.evaluate(EXTRACT);
-await Bun.write(`${DIR}/raw_browser/${Bun.hash(url).toString(16)}.json`,
+const RENDER_DIR = "<repo>/web_kb/raw_browser"; // dibaca import_browser_rest.py dan import_browser_dump.py
+await Bun.write(`${RENDER_DIR}/${Bun.hash(url).toString(16)}.json`,
   JSON.stringify({ ...data, url, mesin: "b", diambil_pada: new Date().toISOString() }));
 ```
 
