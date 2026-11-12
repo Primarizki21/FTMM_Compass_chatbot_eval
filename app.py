@@ -9,7 +9,7 @@ from uuid import uuid4
 import streamlit as st
 
 from lib import chat_log, gt_eval, llm, rag
-from lib.kb import PRODI_BY_ACRONYM, WEB_DIR, load_documents
+from lib.kb import PRODI_BY_ACRONYM, WEB_CAT_DIR, load_documents
 
 MODE_CHAT = "Chat Bebas"
 MODE_EVAL = "Evaluasi Ground Truth"
@@ -22,7 +22,7 @@ st.set_page_config(page_title="Compass AI - RAG", page_icon="🧭", layout="wide
 
 @st.cache_resource
 def get_retriever() -> rag.CourseRetriever:
-    web_dir = WEB_DIR if os.environ.get("FTMM_WEB") == "1" else None
+    web_dir = WEB_CAT_DIR if os.environ.get("FTMM_WEB") == "1" else None
     return rag.CourseRetriever(load_documents(web_dir=web_dir))
 
 

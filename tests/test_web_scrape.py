@@ -3,7 +3,7 @@ import json
 import pytest
 
 from lib import web_scrape as ws
-from lib.kb import PRODI_ALIASES, PRODI_BY_ACRONYM, format_web_chunk, infer_prodi, load_web_pages
+from lib.kb import PRODI_ALIASES, PRODI_BY_ACRONYM, format_web_chunk, infer_prodi, load_web_categorized
 
 HTML = (
     '<div class="elementor"><script>alert("x")</script><h2>Visi</h2>'
@@ -119,12 +119,22 @@ def test_infer_prodi_and_chunk():
     assert "https://ftmm.unair.ac.id/profil-pimpinan/" in chunk
 
 
-def test_load_web_pages_skips_empty(tmp_path):
+def test_load_web_categorized_skips_dynamic(tmp_path):
+    dasar = {
+        "tipe": "page",
+        "kategori": "akademik",
+        "judul": "Alur KTM",
+        "url": "https://ftmm.unair.ac.id/alur-ktm/",
+        "prodi": "",
+        "halaman": None,
+        "teks": "Isi halaman " * 20,
+    }
     rows = [
-        ws.parse_item(ITEM, "pages"),
-        {**ws.parse_item(ITEM, "pages"), "id": 8, "teks": "", "status": "kosong"},
+        {**dasar, "chunk_id": "WEB-page-7-001", "dipakai_kb": True},
+        {**dasar, "chunk_id": "WEB-post-8-001", "tipe": "post", "dipakai_kb": False},
     ]
-    (tmp_path / "pages.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
-    documents = load_web_pages(tmp_path)
-    assert [doc.kode for doc in documents] == ["WEB-page-7"]
-    assert documents[0].sumber == "https://ftmm.unair.ac.id/profil-pimpinan/"
+    (tmp_path / "chunks.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    documents = load_web_categorized(tmp_path)
+    assert [doc.kode for doc in documents] == ["WEB-page-7-001"]
+    assert documents[0].sumber == "https://ftmm.unair.ac.id/alur-ktm/"
+    assert len(load_web_categorized(tmp_path, semua=True)) == 2

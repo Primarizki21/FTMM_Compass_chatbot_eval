@@ -16,7 +16,7 @@ PRODI_BY_ACRONYM = {
 }
 
 
-WEB_DIR = ROOT / "web_kb"
+WEB_CAT_DIR = ROOT / "web_kb_categorized"
 
 # Halaman web tidak selalu menyebut nama prodi dalam Bahasa Indonesia; alias ini hanya untuk inferensi.
 PRODI_ALIASES = {
@@ -142,11 +142,13 @@ def infer_prodi(judul: str, slug: str) -> str:
 
 def format_web_chunk(page: dict) -> str:
     prodi = page.get("prodi") or "Fakultas"
-    jenis = "Berita" if page.get("tipe") == "post" else "Halaman"
+    jenis = "Dokumen" if page.get("tipe") == "dokumen" else "Halaman"
     tanggal = (page.get("modified") or page.get("tanggal") or "")[:10]
+    kategori = page.get("kategori") or "informasi"
+    halaman = f" | Halaman: {page['halaman']}" if page.get("halaman") else ""
     return (
         f"[INFORMASI WEB FTMM]\n"
-        f"Jenis: {jenis} | Program Studi: {prodi}\n"
+        f"Kategori: {kategori} | Jenis: {jenis} | Program Studi: {prodi}{halaman}\n"
         f"Judul: {page.get('judul', '')}\n"
         f"Sumber: {page.get('url', '')}\n"
         f"Diperbarui: {tanggal}\n"
@@ -154,19 +156,27 @@ def format_web_chunk(page: dict) -> str:
     ).strip()
 
 
-def load_web_pages(web_dir: Path = WEB_DIR) -> list[Course]:
-    """Muat hasil scraping web_kb/pages.jsonl sebagai korpus terpisah dari knowledge_base/."""
-    path = web_dir / "pages.jsonl"
+def load_web_categorized(web_dir: Path = WEB_CAT_DIR, semua: bool = False) -> list[Course]:
+    """Muat unit retrieval dari web_kb_categorized/chunks.jsonl.
+
+    Default hanya dokumen statis (`dipakai_kb`); `semua=True` ikut memuat
+    berita/agenda untuk eksperimen.
+    """
+    path = web_dir / "chunks.jsonl"
     if not path.exists():
-        raise FileNotFoundError(f"Hasil scraping web belum ada di {path}. Jalankan: uv run python scripts/scrape_ftmm.py")
+        raise FileNotFoundError(
+            f"Unit web belum ada di {path}. Jalankan: uv run python scripts/categorize_web_kb.py"
+        )
     documents = []
     for line in path.read_text(encoding="utf-8").splitlines():
         page = json.loads(line)
-        if page.get("status") != "ok":
+        if not page.get("teks"):
+            continue
+        if not semua and not page.get("dipakai_kb"):
             continue
         documents.append(
             Course(
-                kode=f"WEB-{page.get('tipe', 'page')}-{page.get('id') or page.get('slug', '')}",
+                kode=page["chunk_id"],
                 nama=page.get("judul", ""),
                 prodi=page.get("prodi", ""),
                 chunk=format_web_chunk(page),
@@ -179,7 +189,7 @@ def load_web_pages(web_dir: Path = WEB_DIR) -> list[Course]:
 def load_documents(kb_dir: Path = KB_DIR, web_dir: Path | None = None) -> list[Course]:
     documents = load_courses(kb_dir) + load_regulations(kb_dir)
     if web_dir is not None:
-        documents += load_web_pages(web_dir)
+        documents += load_web_categorized(web_dir)
     return documents
 
 

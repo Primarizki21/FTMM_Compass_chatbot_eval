@@ -45,6 +45,17 @@ web_kb/
 └── raw_browser/       # dump hasil render browser (lihat scripts/import_browser_dump.py)
 ```
 
+Turunan yang dipakai KB dan evaluasi, semuanya gitignored:
+
+```
+web_kb_categorized/
+├── <kategori>.json    # dokumen utuh per kategori (satu berkas per kategori)
+├── chunks.jsonl       # unit retrieval: PDF per halaman, teks dipotong ~1.200 char, FAQ per pertanyaan
+├── web_eval.jsonl     # dataset evaluasi retrieval silver (otomatis, untuk regresi)
+├── web_eval_gold.jsonl # dataset evaluasi retrieval gold (kueri manual + luar cakupan)
+└── manifest.json      # jumlah dokumen/chunk, arsip, alasan dokumen di luar KB
+```
+
 Perintah:
 
 ```
@@ -53,7 +64,10 @@ uv run python scripts/scrape_ftmm.py --delay 4             # semua halaman, beri
 uv run python scripts/scrape_ftmm.py --jenis pages,posts   # hanya dua jenis itu
 uv run python scripts/import_browser_rest.py               # susun web_kb dari dump REST browser
 uv run python scripts/import_browser_dump.py               # gabungkan hasil render browser
-uv run python scripts/categorize_web_kb.py                 # JSON per kategori di web_kb_categorized/
+uv run python scripts/categorize_web_kb.py                 # JSON kategori + chunks.jsonl
+uv run python scripts/build_web_eval.py                    # dataset evaluasi retrieval web (silver)
+uv run python scripts/build_web_gold.py                    # dataset evaluasi retrieval web (gold)
+uv run python scripts/run_web_eval.py                      # evaluasi retrieval web (BM25)
 uv run python build_index.py --web                          # index Dense dengan web
 uv run python run_bm25.py --web                             # benchmark dengan web
 FTMM_WEB=1 uv run streamlit run app.py                      # UI dengan web
@@ -70,8 +84,11 @@ ulangi paling cepat 30 menit setelah request terakhir. `--delay` minimal 4 detik
 berdasarkan `modified`, `--limit N` membatasi dokumen per jenis.
 
 Web tidak masuk `load_documents()` secara default: korpus berubah berarti `corpus_hash` berubah dan
-index Dense lama batal. Aktifkan hanya dengan `--web` atau `FTMM_WEB=1`. Prodi halaman ditebak dari
-judul/slug; kosong berarti berlaku untuk fakultas.
+index Dense lama batal. Aktifkan hanya dengan `--web` atau `FTMM_WEB=1`, setelah
+`uv run python scripts/categorize_web_kb.py`. Korpus web hanya memakai dokumen statis (halaman,
+dokumen resmi, profil staf, info prodi, regulasi, FAQ); berita, agenda, laporan administratif,
+dan duplikat judul tetap tersimpan di `web_kb_categorized/` tetapi tidak ikut retrieval. Edisi lama buku pedoman ditandai arsip dan juga
+tidak dipakai. Prodi halaman ditebak dari judul/slug; kosong berarti berlaku untuk fakultas.
 
 Setelah data lengkap, periksa hasilnya; semua test harus lolos:
 
@@ -95,6 +112,9 @@ Opsional. Butuh `make` (tersedia di Linux, macOS, WSL2). Di Windows tanpa `make`
 | `make bm25` | Benchmark retrieval BM25 tanpa LLM |
 | `make ledger` | Susun ledger agregat dari `results/` |
 | `make scrape` | Ambil informasi web FTMM ke `web_kb/` |
+| `make kategori` | Susun JSON kategori + unit retrieval di `web_kb_categorized/` |
+| `make web-eval` | Susun dataset evaluasi retrieval web |
+| `make web-eval-run` | Evaluasi retrieval web dengan BM25 |
 | `make clean-index` | Hapus index Dense agar dibuat ulang |
 
 Model embedding mengikuti `EMBED_MODEL_NAME`. Ganti model = jalankan `make index` sekali; berkas model lama tetap ada di `index/` dan bisa dihapus manual.
@@ -202,6 +222,40 @@ Saat menafsirkan hasil:
 - Jawaban acuan silabus dibuat dari template katalog, dan sebagian baris GT memuat pertanyaan duplikat. Hitung ulang dari `GT_MASTER.csv` bila butuh angka; sampel GT tidak sepenuhnya independen.
 - Jawaban yang benar tapi memakai kata lain mendapat ROUGE rendah. BERTScore lebih tepat untuk parafrasa.
 - BERTScore dan ROUGE tidak mendeteksi jawaban yang terdengar benar tapi tidak didukung konteks.
+
+## Evaluasi Retrieval Web
+
+`web_kb_categorized/web_eval.jsonl` berisi kueri yang dibuat otomatis dari unit KB
+(halaman statis, profil, regulasi, dan PDF), dengan target URL dan chunk sumber. Dataset ini
+**silver**: deterministik, dipakai untuk regresi cepat. `web_eval_gold.jsonl` berisi kueri
+tulis tangan beserta kueri di luar cakupan; pakai dataset ini untuk angka yang dilaporkan.
+Kueri FAQ memakai pertanyaan asli; kueri silver lain diturunkan dari judul/bagian dokumen.
+
+```
+uv run python scripts/build_web_eval.py     # silver: kueri otomatis dari judul/bagian
+uv run python scripts/build_web_gold.py     # gold: kueri manual + target URL
+uv run python scripts/run_web_eval.py       # evaluasi silver
+uv run python scripts/run_web_eval.py --dataset web_kb_categorized/web_eval_gold.jsonl
+uv run python scripts/run_web_eval.py --gabung   # kurikulum + regulasi ikut jadi distraktor
+uv run python scripts/run_web_eval.py --metode "Dense (Embedding)"
+```
+
+Dataset gold berisi kueri tulis tangan dan 6 kueri di luar cakupan. Dataset silver tetap dipakai
+untuk regresi cepat; angka silver lebih tinggi karena kuerinya memuat kata dari judul target.
+
+`--gabung` memakai korpus yang sama dengan `FTMM_WEB=1`. Hasilnya menunjukkan kueri web tetap
+tinggi, tetapi kueri kurikulum turun. Jadi korpus boleh digabung untuk evaluasi, tetapi produksi
+sebaiknya merutekan atau memberi kuota per koleksi, bukan satu index datar.
+
+Gold set menurunkan angka dibanding silver karena kuerinya tidak memuat kata dari judul target.
+Kategori `akademik` paling lemah di Hit@1: chunk FAQ mengalahkan halaman prosedur. Kueri luar
+cakupan dilaporkan terpisah; sebagian besar masih mengembalikan hasil, jadi ambang skor belum
+memisahkan. Angka aktual ada di `results/web_eval/<metode>/summary.md`.
+
+Hasil ada di `results/web_eval/<metode>/`: `metrics.csv`, `summary.md`, `traces.jsonl`, `run.json`.
+Metrik dihitung pada URL unik (`hit@1/3/5`, `mrr@5`, `recall@5`, `ndcg@5`) agar beberapa chunk dari
+halaman yang sama tidak menghabiskan slot Top-5. Metode Dense/Hybrid membutuhkan
+`build_index.py --web` dan Ollama aktif.
 
 ## Ledger
 
