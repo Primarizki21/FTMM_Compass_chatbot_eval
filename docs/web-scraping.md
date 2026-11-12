@@ -81,7 +81,8 @@ Keluaran:
 - `chunks.jsonl` — unit yang dipakai retriever. Field: `chunk_id, induk_id, tipe, kategori,
   dasar_kategori, judul, url, prodi, tanggal, modified, halaman, jenis_unit, jumlah_karakter,
   dipakai_kb, teks`.
-- `manifest.json` — jumlah dokumen/chunk, arsip, aturan klasifikasi.
+- `manifest.json` — jumlah dokumen/chunk, arsip, alasan dokumen di luar KB, aturan klasifikasi.
+- `web_eval.jsonl` dan `web_eval_gold.jsonl` — dataset evaluasi retrieval silver dan gold.
 
 Aturan bentuk data:
 

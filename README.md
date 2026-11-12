@@ -51,8 +51,9 @@ Turunan yang dipakai KB dan evaluasi, semuanya gitignored:
 web_kb_categorized/
 ├── <kategori>.json    # dokumen utuh per kategori (satu berkas per kategori)
 ├── chunks.jsonl       # unit retrieval: PDF per halaman, teks dipotong ~1.200 char, FAQ per pertanyaan
-├── web_eval.jsonl     # kandidat dataset evaluasi retrieval (silver, siap dikurasi)
-└── manifest.json      # jumlah dokumen/chunk, arsip, aturan klasifikasi
+├── web_eval.jsonl     # dataset evaluasi retrieval silver (otomatis, untuk regresi)
+├── web_eval_gold.jsonl # dataset evaluasi retrieval gold (kueri manual + luar cakupan)
+└── manifest.json      # jumlah dokumen/chunk, arsip, alasan dokumen di luar KB
 ```
 
 Perintah:
@@ -64,7 +65,8 @@ uv run python scripts/scrape_ftmm.py --jenis pages,posts   # hanya dua jenis itu
 uv run python scripts/import_browser_rest.py               # susun web_kb dari dump REST browser
 uv run python scripts/import_browser_dump.py               # gabungkan hasil render browser
 uv run python scripts/categorize_web_kb.py                 # JSON kategori + chunks.jsonl
-uv run python scripts/build_web_eval.py                    # dataset evaluasi retrieval web
+uv run python scripts/build_web_eval.py                    # dataset evaluasi retrieval web (silver)
+uv run python scripts/build_web_gold.py                    # dataset evaluasi retrieval web (gold)
 uv run python scripts/run_web_eval.py                      # evaluasi retrieval web (BM25)
 uv run python build_index.py --web                          # index Dense dengan web
 uv run python run_bm25.py --web                             # benchmark dengan web
@@ -225,8 +227,9 @@ Saat menafsirkan hasil:
 
 `web_kb_categorized/web_eval.jsonl` berisi kueri yang dibuat otomatis dari unit KB
 (halaman statis, profil, regulasi, dan PDF), dengan target URL dan chunk sumber. Dataset ini
-**silver**: deterministik dan siap dikurasi, tetapi belum menggantikan ground truth tulisan tangan.
-Kueri FAQ memakai pertanyaan asli; kueri lain diturunkan dari judul/bagian dokumen.
+**silver**: deterministik, dipakai untuk regresi cepat. `web_eval_gold.jsonl` berisi kueri
+tulis tangan beserta kueri di luar cakupan; pakai dataset ini untuk angka yang dilaporkan.
+Kueri FAQ memakai pertanyaan asli; kueri silver lain diturunkan dari judul/bagian dokumen.
 
 ```
 uv run python scripts/build_web_eval.py     # silver: kueri otomatis dari judul/bagian
