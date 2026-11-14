@@ -1,6 +1,6 @@
 # RAG
 
-UI chatbot dan evaluasi metode RAG FTMM COMPASS. LLM bisa memakai 9Router (OpenAI-compatible, lewat tunnel tim), model lokal (Ollama), atau Gemini API.
+UI chatbot dan evaluasi metode RAG FTMM COMPASS. LLM bisa memakai 9Router (OpenAI-compatible, lewat tunnel tim), OpenAI API, model lokal (Ollama), atau Gemini API.
 Knowledge base berasal dari tim (`Dataset Matkul Prodi` di Drive: JSON kurikulum per prodi + panduan regulasi); ground truth diturunkan dari `gt_master.json` repo chatbot.
 
 - **Mode Chat Bebas**: bertanya apa saja, riwayat tersimpan ke `chat_logs/chat_history.csv`.
@@ -144,6 +144,18 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 Pertanyaan dan potongan knowledge base dikirim ke 9Router. Embedding tetap memakai model lokal, jadi metode selain BM25 tetap membutuhkan Ollama.
 
+### Memakai OpenAI langsung (opsional)
+
+1. Isi `OPENAI_API_KEY=` di `.env`. Jangan membagikan file `.env`.
+2. Isi `OPENAI_MODEL_NAME` (contoh `gpt-6-luna`) atau ganti kolom **Model LLM** di sidebar.
+3. Pilih `OpenAI API` di sidebar.
+
+Request dikirim ke `<OPENAI_BASE_URL>/v1/chat/completions`. `OPENAI_REASONING_EFFORT` default `none` di kode: pada
+nilai itu `temperature`/`top_p` ikut terkirim sehingga setelan sama dengan provider lain. Bila diisi `low`/`medium`/
+`high`, OpenAI menolak `temperature`/`top_p`, jadi keduanya otomatis tidak dikirim; token reasoning ikut memakan
+`max_completion_tokens`, sehingga batas keluaran naik ke `OPENAI_REASONING_MAX_TOKENS` (2048). Kosongkan variabel ini
+untuk model non-reasoning.
+
 ### Memakai Gemini (opsional)
 
 1. Isi `GEMINI_API_KEY=` di `.env`. Jangan membagikan file `.env`.
@@ -276,6 +288,7 @@ Bisa diisi di `.env`:
 | Variabel | Fungsi |
 |---|---|
 | `NINE_ROUTER_HOST`, `NINE_ROUTER_MODEL`, `NINE_ROUTER_API_KEY` | Provider utama tim lewat tunnel |
+| `OPENAI_API_KEY`, `OPENAI_MODEL_NAME`, `OPENAI_BASE_URL`, `OPENAI_REASONING_EFFORT` | Provider langsung ke OpenAI |
 | `GEMINI_API_KEY`, `GEMINI_MODEL_NAME` | Provider pembanding langsung ke Google |
 | `LLM_MODEL_NAME`, `EMBED_MODEL_NAME`, `OLLAMA_HOST` | LLM lokal dan embedding |
 
@@ -301,7 +314,7 @@ Yang disamakan dengan aplikasi: format chunk kurikulum dan regulasi, opsi LLM lo
 parameter BM25, RRF k=60, serta prompt reformulasi.
 
 Yang berbeda: kurikulum dan regulasi dicari dalam satu index (di aplikasi terpisah), prompt sistem menyebut regulasi,
-pencarian Dense memakai NumPy (hasil setara `IndexFlatIP`), batas keluaran mengikuti `CHAT_OPTIONS` untuk 9Router/Ollama
+pencarian Dense memakai NumPy (hasil setara `IndexFlatIP`), batas keluaran mengikuti `CHAT_OPTIONS` untuk 9Router/OpenAI/Ollama
 dan `GEMINI_MAX_OUTPUT_TOKENS` untuk Gemini, serta ada filter prodi opsional.
 
 Batasan: kueri lanjutan seperti "prasyaratnya apa?" dicari apa adanya, sama seperti `PureRAGEngine`.

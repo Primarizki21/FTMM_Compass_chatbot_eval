@@ -64,6 +64,13 @@ def warn_setup_problems(method: str, config: llm.LLMConfig) -> None:
         else:
             st.info(f"Pertanyaan dan konteks dikirim ke 9Router melalui {llm.nine_router_endpoint()}.")
 
+    if config.provider == llm.OPENAI:
+        problem = llm.openai_setup_problem(config.model)
+        if problem:
+            st.warning(problem)
+        else:
+            st.info(f"Pertanyaan dan konteks dikirim ke OpenAI melalui {llm.openai_endpoint()}.")
+
     required = set()
     if config.provider == llm.LOCAL:
         required.add(config.model)
