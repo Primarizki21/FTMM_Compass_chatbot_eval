@@ -48,6 +48,8 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 CHAT_OPTIONS = {"temperature": 0.2, "top_p": 0.9, "num_predict": 512, "num_ctx": 2048}
 # Lebih longgar dari model lokal karena token "thinking" Gemini ikut dihitung dalam batas ini.
 GEMINI_MAX_OUTPUT_TOKENS = 2048
+# Token reasoning juga memakan max_completion_tokens; 512 habis sebelum jawaban selesai.
+OPENAI_REASONING_MAX_TOKENS = 2048
 
 
 class LLMError(RuntimeError):
@@ -240,6 +242,10 @@ def _openai_reasoning() -> dict:
     return {"reasoning_effort": OPENAI_REASONING_EFFORT} if OPENAI_REASONING_EFFORT else {}
 
 
+def _openai_max_tokens(non_reasoning: int) -> int:
+    return non_reasoning if _openai_accepts_sampling() else OPENAI_REASONING_MAX_TOKENS
+
+
 def _stream_openai(messages: list[dict], model: str, start: float, stats: dict) -> Iterator[str]:
     problem = openai_setup_problem(model)
     if problem:
@@ -247,7 +253,7 @@ def _stream_openai(messages: list[dict], model: str, start: float, stats: dict) 
     payload = {
         "model": model,
         "messages": messages,
-        "max_completion_tokens": CHAT_OPTIONS["num_predict"],
+        "max_completion_tokens": _openai_max_tokens(CHAT_OPTIONS["num_predict"]),
         "stream": True,
         # Usage hanya ikut terkirim bila diminta eksplisit; tanpa ini prompt_tokens/answer_tokens kosong.
         "stream_options": {"include_usage": True},
@@ -266,7 +272,7 @@ def _openai_complete_prompt(prompt: str, model: str, max_tokens: int) -> str:
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_completion_tokens": max_tokens,
+        "max_completion_tokens": _openai_max_tokens(max_tokens),
         "stream": False,
         **_openai_reasoning(),
     }

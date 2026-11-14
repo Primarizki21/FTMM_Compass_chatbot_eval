@@ -83,8 +83,24 @@ def test_openai_drops_sampling_when_reasoning_active(monkeypatch):
 
     payload = captured["json"]
     assert payload["reasoning_effort"] == "low"
+    assert payload["max_completion_tokens"] == llm.OPENAI_REASONING_MAX_TOKENS
     assert "temperature" not in payload
     assert "top_p" not in payload
+
+
+def test_openai_reformulation_grows_budget_when_reasoning_active(monkeypatch):
+    set_openai(monkeypatch, effort="low")
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return FakeResponse(payload={"choices": [{"message": {"content": "Algoritma Pemrograman"}}]})
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    llm.reformulate_query("belajar koding dasar", llm.LLMConfig(llm.OPENAI, "gpt-6-luna"))
+
+    assert captured["json"]["max_completion_tokens"] == llm.OPENAI_REASONING_MAX_TOKENS
+    assert "temperature" not in captured["json"]
 
 
 def test_openai_rejects_http_error_with_body(monkeypatch):

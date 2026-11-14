@@ -150,10 +150,11 @@ Pertanyaan dan potongan knowledge base dikirim ke 9Router. Embedding tetap memak
 2. Isi `OPENAI_MODEL_NAME` (contoh `gpt-6-luna`) atau ganti kolom **Model LLM** di sidebar.
 3. Pilih `OpenAI API` di sidebar.
 
-Request dikirim ke `<OPENAI_BASE_URL>/v1/chat/completions`. `OPENAI_REASONING_EFFORT` default `none`: pada nilai itu
-`temperature`/`top_p` ikut terkirim sehingga setelan sama dengan provider lain. Bila diisi `low`/`medium`/`high`,
-OpenAI menolak `temperature`/`top_p`, jadi keduanya otomatis tidak dikirim dan latensi/token keluaran akan lebih besar.
-Kosongkan variabel ini untuk model non-reasoning.
+Request dikirim ke `<OPENAI_BASE_URL>/v1/chat/completions`. `OPENAI_REASONING_EFFORT` default `none` di kode: pada
+nilai itu `temperature`/`top_p` ikut terkirim sehingga setelan sama dengan provider lain. Bila diisi `low`/`medium`/
+`high`, OpenAI menolak `temperature`/`top_p`, jadi keduanya otomatis tidak dikirim; token reasoning ikut memakan
+`max_completion_tokens`, sehingga batas keluaran naik ke `OPENAI_REASONING_MAX_TOKENS` (2048). Kosongkan variabel ini
+untuk model non-reasoning.
 
 ### Memakai Gemini (opsional)
 
