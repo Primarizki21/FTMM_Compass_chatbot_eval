@@ -1,4 +1,4 @@
-"""Akses LLM lokal (Ollama), 9Router OpenAI-compatible, atau Gemini API, dan embedding lokal.
+"""Akses LLM lokal (Ollama), 9Router OpenAI-compatible, OpenAI API, atau Gemini API, dan embedding lokal.
 
 Model lokal dimuat bergantian (keep_alive=0) karena VRAM 4 GB tidak muat untuk dua model sekaligus.
 """
@@ -17,8 +17,9 @@ from lib.kb import ROOT
 
 LOCAL = "Lokal (Ollama)"
 NINE_ROUTER = "9Router (OpenAI-compatible)"
+OPENAI = "OpenAI API"
 GEMINI = "Gemini API"
-PROVIDERS = [LOCAL, NINE_ROUTER, GEMINI]
+PROVIDERS = [LOCAL, NINE_ROUTER, OPENAI, GEMINI]
 
 
 def load_env_file(path=ROOT / ".env") -> None:
@@ -36,6 +37,10 @@ load_env_file()
 LOCAL_MODEL = os.getenv("LLM_MODEL_NAME", "llama3.2:3b")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
 NINE_ROUTER_MODEL = os.getenv("NINE_ROUTER_MODEL", "").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL_NAME", "").strip()
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+# GPT-6 Luna mendukung reasoning_effort "none"; saat reasoning aktif OpenAI menolak temperature/top_p.
+OPENAI_REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", "none").strip()
 EMBED_MODEL = os.getenv("EMBED_MODEL_NAME", "nomic-embed-text-v2-moe")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
@@ -58,7 +63,12 @@ class LLMConfig:
     model: str
 
 
-DEFAULT_MODELS = {LOCAL: LOCAL_MODEL, NINE_ROUTER: NINE_ROUTER_MODEL, GEMINI: GEMINI_MODEL}
+DEFAULT_MODELS = {
+    LOCAL: LOCAL_MODEL,
+    NINE_ROUTER: NINE_ROUTER_MODEL,
+    OPENAI: OPENAI_MODEL,
+    GEMINI: GEMINI_MODEL,
+}
 
 _ollama_client = ollama.Client(host=OLLAMA_HOST)
 
@@ -111,42 +121,30 @@ def nine_router_setup_problem(model: str) -> str | None:
     return None
 
 
-def nine_router_endpoint() -> str:
-    return f"{_nine_router_settings()[0]}/v1/chat/completions"
+def _openai_endpoint(base_url: str) -> str:
+    base = base_url.strip().rstrip("/")
+    if base.endswith("/v1"):
+        base = base[: -len("/v1")]
+    return f"{base}/v1/chat/completions"
 
 
-def _nine_router_headers(key: str) -> dict[str, str]:
+def _openai_headers(key: str) -> dict[str, str]:
     return {"Content-Type": "application/json", "Authorization": f"Bearer {key}"}
 
 
-def _nine_router_error(response: httpx.Response) -> LLMError:
+def _openai_error(response: httpx.Response, label: str, hint: str) -> LLMError:
     body = response.read().decode("utf-8", "replace")[:500]
-    return LLMError(
-        f"9Router menolak permintaan ({response.status_code}): {body}. "
-        "NINE_ROUTER_HOST harus base URL tunnel 9router dan NINE_ROUTER_API_KEY harus key "
-        "terbitan dashboard 9router, bukan kunci Google Gemini."
-    )
+    return LLMError(f"{label} menolak permintaan ({response.status_code}): {body}. {hint}".strip())
 
 
-def _stream_nine_router(messages: list[dict], model: str, start: float, stats: dict) -> Iterator[str]:
-    problem = nine_router_setup_problem(model)
-    if problem:
-        raise LLMError(problem)
-    _, key = _nine_router_settings()
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": CHAT_OPTIONS["temperature"],
-        "top_p": CHAT_OPTIONS["top_p"],
-        "max_tokens": CHAT_OPTIONS["num_predict"],
-        "stream": True,
-    }
+def _openai_stream(
+    payload: dict, endpoint: str, key: str, label: str, hint: str, start: float, stats: dict
+) -> Iterator[str]:
+    """Transport SSE OpenAI-compatible. Payload dibentuk pemanggil karena aturan tiap provider berbeda."""
     timeout = httpx.Timeout(120.0, connect=5.0)
-    with httpx.stream(
-        "POST", nine_router_endpoint(), json=payload, headers=_nine_router_headers(key), timeout=timeout
-    ) as response:
+    with httpx.stream("POST", endpoint, json=payload, headers=_openai_headers(key), timeout=timeout) as response:
         if response.status_code >= 400:
-            raise _nine_router_error(response)
+            raise _openai_error(response, label, hint)
         for line in response.iter_lines():
             if not line.startswith("data:"):
                 continue
@@ -168,6 +166,41 @@ def _stream_nine_router(messages: list[dict], model: str, start: float, stats: d
                 yield text
 
 
+def _openai_complete(payload: dict, endpoint: str, key: str, label: str, hint: str) -> str:
+    timeout = httpx.Timeout(60.0, connect=5.0)
+    response = httpx.post(endpoint, json=payload, headers=_openai_headers(key), timeout=timeout)
+    if response.status_code >= 400:
+        raise _openai_error(response, label, hint)
+    first_choice = (response.json().get("choices") or [{}])[0]
+    return (first_choice.get("message") or {}).get("content") or ""
+
+
+NINE_ROUTER_HINT = (
+    "NINE_ROUTER_HOST harus base URL tunnel 9router dan NINE_ROUTER_API_KEY harus key "
+    "terbitan dashboard 9router, bukan kunci Google Gemini."
+)
+
+
+def nine_router_endpoint() -> str:
+    return f"{_nine_router_settings()[0]}/v1/chat/completions"
+
+
+def _stream_nine_router(messages: list[dict], model: str, start: float, stats: dict) -> Iterator[str]:
+    problem = nine_router_setup_problem(model)
+    if problem:
+        raise LLMError(problem)
+    _, key = _nine_router_settings()
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": CHAT_OPTIONS["temperature"],
+        "top_p": CHAT_OPTIONS["top_p"],
+        "max_tokens": CHAT_OPTIONS["num_predict"],
+        "stream": True,
+    }
+    yield from _openai_stream(payload, nine_router_endpoint(), key, "9Router", NINE_ROUTER_HINT, start, stats)
+
+
 def _nine_router_complete(prompt: str, model: str, max_tokens: int) -> str:
     problem = nine_router_setup_problem(model)
     if problem:
@@ -180,12 +213,67 @@ def _nine_router_complete(prompt: str, model: str, max_tokens: int) -> str:
         "max_tokens": max_tokens,
         "stream": False,
     }
-    timeout = httpx.Timeout(60.0, connect=5.0)
-    response = httpx.post(nine_router_endpoint(), json=payload, headers=_nine_router_headers(key), timeout=timeout)
-    if response.status_code >= 400:
-        raise _nine_router_error(response)
-    first_choice = (response.json().get("choices") or [{}])[0]
-    return (first_choice.get("message") or {}).get("content") or ""
+    return _openai_complete(payload, nine_router_endpoint(), key, "9Router", NINE_ROUTER_HINT)
+
+
+def openai_setup_problem(model: str) -> str | None:
+    if not os.getenv("OPENAI_API_KEY", "").strip():
+        return "OPENAI_API_KEY belum diatur. Isi key OpenAI di file .env."
+    if not model.strip():
+        return "Model OpenAI belum diisi. Isi kolom Model LLM di sidebar atau OPENAI_MODEL_NAME di .env."
+    return None
+
+
+def openai_endpoint() -> str:
+    return _openai_endpoint(OPENAI_BASE_URL)
+
+
+OPENAI_HINT = "Periksa OPENAI_API_KEY dan OPENAI_MODEL_NAME; model harus tersedia untuk key tersebut."
+
+
+def _openai_accepts_sampling() -> bool:
+    """OpenAI menolak temperature/top_p kecuali reasoning_effort bernilai "none"."""
+    return OPENAI_REASONING_EFFORT in ("", "none")
+
+
+def _openai_reasoning() -> dict:
+    return {"reasoning_effort": OPENAI_REASONING_EFFORT} if OPENAI_REASONING_EFFORT else {}
+
+
+def _stream_openai(messages: list[dict], model: str, start: float, stats: dict) -> Iterator[str]:
+    problem = openai_setup_problem(model)
+    if problem:
+        raise LLMError(problem)
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_completion_tokens": CHAT_OPTIONS["num_predict"],
+        "stream": True,
+        # Usage hanya ikut terkirim bila diminta eksplisit; tanpa ini prompt_tokens/answer_tokens kosong.
+        "stream_options": {"include_usage": True},
+        **_openai_reasoning(),
+    }
+    if _openai_accepts_sampling():
+        payload.update(temperature=CHAT_OPTIONS["temperature"], top_p=CHAT_OPTIONS["top_p"])
+    key = os.environ["OPENAI_API_KEY"].strip()
+    yield from _openai_stream(payload, openai_endpoint(), key, "OpenAI", OPENAI_HINT, start, stats)
+
+
+def _openai_complete_prompt(prompt: str, model: str, max_tokens: int) -> str:
+    problem = openai_setup_problem(model)
+    if problem:
+        raise LLMError(problem)
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_completion_tokens": max_tokens,
+        "stream": False,
+        **_openai_reasoning(),
+    }
+    if _openai_accepts_sampling():
+        payload["temperature"] = 0.0
+    key = os.environ["OPENAI_API_KEY"].strip()
+    return _openai_complete(payload, openai_endpoint(), key, "OpenAI", OPENAI_HINT)
 
 
 def _gemini_client():
@@ -253,6 +341,8 @@ def stream_chat(messages: list[dict], config: LLMConfig, keep_alive: int | str, 
         yield from _stream_gemini(messages, config.model, start, stats)
     elif config.provider == NINE_ROUTER:
         yield from _stream_nine_router(messages, config.model, start, stats)
+    elif config.provider == OPENAI:
+        yield from _stream_openai(messages, config.model, start, stats)
     else:
         yield from _stream_ollama(messages, config.model, keep_alive, start, stats)
     stats["generation_ms"] = (time.perf_counter() - start) * 1000.0
@@ -281,6 +371,8 @@ def reformulate_query(query: str, config: LLMConfig) -> str:
         text = response.text or ""
     elif config.provider == NINE_ROUTER:
         text = _nine_router_complete(prompt, config.model, max_tokens=30)
+    elif config.provider == OPENAI:
+        text = _openai_complete_prompt(prompt, config.model, max_tokens=30)
     else:
         response = _ollama_client.chat(
             model=config.model,
