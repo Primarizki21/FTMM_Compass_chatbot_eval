@@ -257,6 +257,7 @@ def write_report(
             "corpus_sha256": corpus_hash(courses),
             "dataset": "ir_eval+complexity",
             "dataset_sha256": run_manifest.file_sha256(GT_DIR / "ir_eval_dataset.json"),
+            "dataset_sha256_complexity": run_manifest.file_sha256(GT_DIR / "retrieval_complexity_benchmark.json"),
             "n_unit": len(ir_records) + len(complexity_records),
         },
     )
