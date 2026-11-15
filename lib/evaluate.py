@@ -55,10 +55,18 @@ def to_trace(hits: list[tuple], courses: list[Course], depth: int = TRACE_DEPTH)
     ]
 
 
+def uid_targets(item: dict) -> set[str]:
+    """Target UID dari `scripts/normalize_gt_ids.py`; tolak dataset yang belum dinormalisasi."""
+    uids = {str(uid) for uid in item.get("target_uids") or []}
+    if not uids:
+        raise ValueError(f"{item['id']} belum punya target_uids. Jalankan: uv run python scripts/normalize_gt_ids.py")
+    return uids
+
+
 def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict]) -> list[dict]:
     records = []
     for q in queries:
-        targets = {k.strip() for k in q["target_kode_mk"]}
+        targets = uid_targets(q)
         hits, latency = run_search(search, q["question"])
         records.append(
             {
@@ -71,7 +79,10 @@ def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict]) -> lis
                 "latency_ms": latency,
                 "top5": to_trace(hits, courses, TOP_TRACE),
                 "kandidat": to_trace(hits, courses),
-                "skor_kode": score_ranking((courses[i].kode for i, *_ in hits), targets),
+                "skor_uid": score_ranking((courses[i].uid for i, *_ in hits), targets),
+                "skor_kode": score_ranking(
+                    (courses[i].kode for i, *_ in hits), {k.strip() for k in q["target_kode_mk"]}
+                ),
             }
         )
     return records
@@ -93,9 +104,11 @@ def eval_complexity(search: SearchFn, courses: list[Course], queries: list[dict]
         }
         if not q["is_out_of_scope"]:
             codes = {k.strip() for k in q["target_kode_mk"]}
+            uids = uid_targets(q)
             prodi = PRODI_BY_ACRONYM[q["program_studi"]]
-            record["target"] = sorted(codes)
+            record["target"] = sorted(uids)
             record["prodi"] = prodi
+            record["skor_uid"] = score_ranking((courses[i].uid for i, *_ in hits), uids)
             record["skor_kode"] = score_ranking((courses[i].kode for i, *_ in hits), codes)
             record["skor_kode_prodi"] = score_ranking(
                 ((courses[i].kode, courses[i].prodi) for i, *_ in hits),
@@ -129,17 +142,17 @@ def aggregate(dataset: str, penilaian: str, kelompok: str, records: list[dict], 
 
 
 def build_rows(ir_records: list[dict], complexity_records: list[dict]) -> list[dict]:
-    rows = [aggregate("ir_eval", "kode", "semua", ir_records, "skor_kode")]
+    rows = [aggregate("ir_eval", "uid", "semua", ir_records, "skor_uid")]
     for register in ("formal", "informal", "bilingual"):
         subset = [r for r in ir_records if r["register"] == register]
-        rows.append(aggregate("ir_eval", "kode", f"register: {register}", subset, "skor_kode"))
+        rows.append(aggregate("ir_eval", "uid", f"register: {register}", subset, "skor_uid"))
     for jumlah in ("tunggal", "ganda"):
         subset = [r for r in ir_records if r["jumlah_target"] == jumlah]
-        rows.append(aggregate("ir_eval", "kode", f"target {jumlah}", subset, "skor_kode"))
+        rows.append(aggregate("ir_eval", "uid", f"target {jumlah}", subset, "skor_uid"))
 
     in_scope = [r for r in complexity_records if "skor_kode" in r]
     tiers = sorted({r["tier"] for r in in_scope})
-    for penilaian, key in (("kode", "skor_kode"), ("kode+prodi", "skor_kode_prodi")):
+    for penilaian, key in (("uid", "skor_uid"), ("kode+prodi", "skor_kode_prodi")):
         rows.append(aggregate("complexity", penilaian, "semua (dalam cakupan)", in_scope, key))
         for tier in tiers:
             subset = [r for r in in_scope if r["tier"] == tier]

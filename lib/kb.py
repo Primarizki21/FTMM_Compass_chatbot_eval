@@ -16,6 +16,8 @@ PRODI_BY_ACRONYM = {
 }
 
 
+ACRONYM_BY_PRODI = {nama: akronim for akronim, nama in PRODI_BY_ACRONYM.items()}
+
 WEB_CAT_DIR = ROOT / "web_kb_categorized"
 
 # Halaman web tidak selalu menyebut nama prodi dalam Bahasa Indonesia; alias ini hanya untuk inferensi.
@@ -43,11 +45,17 @@ REGULATION_SOURCES = [
 
 @dataclass(frozen=True)
 class Course:
+    """`uid` adalah kunci identitas global: `MK:<akronim>:<id>`, `REG:<topik>:<id>`, atau `chunk_id` web.
+
+    `kode` tidak unik lintas prodi, jadi penilaian retrieval memakai `uid`.
+    """
+
     kode: str
     nama: str
     prodi: str
     chunk: str
     sumber: str = ""
+    uid: str = ""
 
 
 def format_course_chunk(mk: dict) -> str:
@@ -126,6 +134,7 @@ def load_regulations(kb_dir: Path = KB_DIR) -> list[Course]:
                     prodi="",
                     chunk=format_regulation_chunk(item, default_source, topic),
                     sumber=f"regulasi/{filename}",
+                    uid=f"REG:{topic}:{item.get('id') or position}",
                 )
             )
     return documents
@@ -181,6 +190,7 @@ def load_web_categorized(web_dir: Path = WEB_CAT_DIR, semua: bool = False) -> li
                 prodi=page.get("prodi", ""),
                 chunk=format_web_chunk(page),
                 sumber=page.get("url", ""),
+                uid=page["chunk_id"],
             )
         )
     return documents
@@ -204,13 +214,16 @@ def load_courses(kb_dir: Path = KB_DIR) -> list[Course]:
         default_prodi = data.get("metadata", {}).get("program_studi", path.stem.replace("FIX ", ""))
         for mk in data.get("mata_kuliah", []):
             mk["program_studi"] = mk.get("program_studi") or default_prodi
+            prodi = mk["program_studi"].strip()
+            kode = mk.get("kode_mk", "").strip()
             courses.append(
                 Course(
-                    kode=mk.get("kode_mk", "").strip(),
+                    kode=kode,
                     nama=mk.get("nama_mk", "").strip(),
-                    prodi=mk["program_studi"].strip(),
+                    prodi=prodi,
                     chunk=format_course_chunk(mk),
                     sumber=path.name,
+                    uid=f"MK:{ACRONYM_BY_PRODI.get(prodi, prodi)}:{mk.get('id') or kode}",
                 )
             )
     return courses

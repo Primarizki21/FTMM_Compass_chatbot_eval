@@ -23,6 +23,9 @@ bm25: ## Benchmark retrieval BM25 tanpa LLM
 ledger: ## Susun ledger agregat dari results/
 	uv run python scripts/ledger.py
 
+gt-uid: ## Tambahkan UID global ke dataset ground truth
+	uv run python scripts/normalize_gt_ids.py
+
 scrape: ## Ambil informasi web FTMM ke web_kb/ (konservatif)
 	uv run python scripts/scrape_ftmm.py --delay 4
 

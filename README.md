@@ -27,6 +27,11 @@ uv sync
 Tanpa keduanya aplikasi gagal memuat dokumen dan sebagian test gagal karena data tidak ada, bukan karena bug kode.
 Ground truth diturunkan dari repo chatbot: `data/ground_truth/gt_master.json` dengan kolom `id, question, answer, source_id, source_type`.
 
+Penilaian retrieval memakai UID global, bukan `source_id`/`kode_mk`, karena kode MK tidak unik lintas prodi.
+`uv run python scripts/normalize_gt_ids.py` menambahkan `target_uids` ke kedua dataset JSON dan menulis pemetaan
+`source_id` → UID ke `ground_truth/gt_source_uids.csv`, plus laporan `results/gt_audit/uid_report.md`. Jalankan ulang
+setiap kali dataset atau `knowledge_base/` diganti.
+
 ### Data web FTMM (terisolasi)
 
 Informasi publik `ftmm.unair.ac.id` masuk ke `web_kb/`, bukan `knowledge_base/`. Cara lengkap
@@ -226,6 +231,17 @@ kombinasi model/metode/top-k untuk memulai run baru.
 
 Retrieval soal regulasi tidak dinilai karena `source_id`-nya tidak menunjuk ke satu butir yang pasti:
 angka yang sama dipakai di beberapa file panduan, dan banyak soal merujuk beberapa sumber sekaligus.
+
+### Identitas target (UID)
+
+`run_bm25.py` menilai peringkat terhadap UID, bukan kode MK. Format UID: `MK:<akronim>:<id>` untuk kurikulum,
+`REG:<topik>:<id>` untuk regulasi, dan `chunk_id` untuk unit web. UID unik di seluruh korpus, termasuk dua mata kuliah
+yang memakai kode sama dalam satu prodi.
+
+- `ir_eval_dataset.json` menilai secara prodi-agnostik: target = semua UID dengan kode dan nama yang sama.
+- `retrieval_complexity_benchmark.json` menilai per prodi: target = UID pada prodi yang disebut kueri.
+- `metrics.csv` memakai kolom `penilaian` = `uid`; `kode` dan `kode+prodi` hanya untuk pembanding laporan lama.
+- Dataset tanpa `target_uids` ditolak `lib/evaluate.py` dengan pesan untuk menjalankan `scripts/normalize_gt_ids.py`.
 
 Saat menafsirkan hasil:
 
