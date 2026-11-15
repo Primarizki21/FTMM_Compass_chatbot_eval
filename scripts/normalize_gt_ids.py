@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from lib.kb import PRODI_BY_ACRONYM, load_documents, load_web_categorized  # noqa: E402
+from lib.runlog import catat_event, catat_run  # noqa: E402
 
 GT_DIR = ROOT / "ground_truth"
 IR_PATH = GT_DIR / "ir_eval_dataset.json"
@@ -203,18 +204,25 @@ def tulis_laporan(ir: Counter, cx: Counter, web: Counter, gt: Counter, keluaran:
 
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
-    _, by_kode = muat_korpus()
-    ir = proses_ir(by_kode)
-    cx = proses_complexity(by_kode)
-    web = proses_web_gold()
-    gt, keluaran = proses_gt_master(by_kode)
-    path = tulis_laporan(ir, cx, web, gt, keluaran)
-    print(f"ir_eval: {dict(ir)}")
-    print(f"complexity: {dict(cx)}")
-    print(f"web_gold: {dict(web)}")
-    print(f"GT_MASTER: {dict(gt)}")
-    print(f"Pemetaan: {UID_MAP_PATH}")
-    print(f"Laporan: {path}")
+    with catat_run(AUDIT_DIR, sys.argv, nama_log="normalize.log"):
+        try:
+            _, by_kode = muat_korpus()
+            catat_event(AUDIT_DIR, tahap="muat_korpus", kode_unik=len(by_kode))
+            ir = proses_ir(by_kode)
+            cx = proses_complexity(by_kode)
+            web = proses_web_gold()
+            gt, keluaran = proses_gt_master(by_kode)
+            path = tulis_laporan(ir, cx, web, gt, keluaran)
+            catat_event(AUDIT_DIR, tahap="selesai", ir=dict(ir), complexity=dict(cx), web_gold=dict(web), gt_master=dict(gt))
+            print(f"ir_eval: {dict(ir)}")
+            print(f"complexity: {dict(cx)}")
+            print(f"web_gold: {dict(web)}")
+            print(f"GT_MASTER: {dict(gt)}")
+            print(f"Pemetaan: {UID_MAP_PATH}")
+            print(f"Laporan: {path}")
+        except BaseException as error:
+            catat_event(AUDIT_DIR, tahap="gagal", error=f"{type(error).__name__}: {error}")
+            raise
 
 
 if __name__ == "__main__":

@@ -248,6 +248,18 @@ yang memakai kode sama dalam satu prodi.
 - `metrics.csv` memakai kolom `penilaian` = `uid`; `kode` dan `kode+prodi` hanya untuk pembanding laporan lama.
 - Dataset tanpa `target_uids` ditolak `lib/evaluate.py` dengan pesan untuk menjalankan `scripts/normalize_gt_ids.py`.
 
+Kebijakan target: **default satu UID**, yaitu dokumen yang memuat bukti yang diminta soal. Soal prosedur memakai
+`REG:sop:N`; soal aturan memakai `REG:<topik>:N`. Target ganda hanya bila soal menuntut dua bukti sekaligus.
+Dokumen yang "kira-kira relevan" tidak boleh ditambahkan: pada kueri prosedur, dokumen aturan kerap menang di
+peringkat teratas, dan target ganda akan memberi `hit@1` penuh pada retriever yang tidak pernah mengembalikan prosedur.
+
+### Log eksekusi
+
+Skrip menulis log sendiri ke direktori run (`results/<run>/`): `run.log` (stdout + stderr + `argv`), `log.jsonl`
+(satu objek per tahap), dan `errors.log` (traceback saat gagal). Jalur Streamlit mencatat per soal lewat
+`jejak_<name>.jsonl`; terminalnya dicatat dengan `uv run streamlit run app.py 2>&1 | tee results/evaluasi/streamlit.log`.
+`build_index.py` menulis ke `results/build_index/`, `scripts/normalize_gt_ids.py` ke `results/gt_audit/`.
+
 Saat menafsirkan hasil:
 
 - Semua soal silabus menyebut kode MK, sehingga BM25 diuntungkan. Untuk membandingkan metode retrieval,

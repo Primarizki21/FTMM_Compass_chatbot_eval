@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 from lib import rag, run_manifest  # noqa: E402
 from lib.kb import WEB_CAT_DIR, load_documents, load_web_categorized  # noqa: E402
+from lib.runlog import catat_event, catat_run  # noqa: E402
 from lib.metrics import score_ranking  # noqa: E402
 METRIK = ["hit@1", "hit@3", "hit@5", "mrr@5", "recall@5", "ndcg@5"]
 
@@ -58,6 +59,11 @@ def slug(teks: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", teks.lower()).strip("-")
 
 
+def nama_run(args) -> str:
+    nama = slug(args.metode) + ("-gabung" if args.gabung else "")
+    return nama + "-gold" if "gold" in args.dataset.name else nama
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, default=WEB_CAT_DIR / "web_eval.jsonl")
@@ -68,7 +74,20 @@ def main() -> None:
     parser.add_argument("--gabung", action="store_true", help="Sertakan kurikulum dan regulasi sebagai distraktor")
     args = parser.parse_args()
 
+    out = args.output / nama_run(args)
+    with catat_run(out, sys.argv):
+        try:
+            catat_event(out, tahap="mulai", metode=args.metode, dataset=args.dataset.name, gabung=args.gabung, top_k=args.top_k)
+            jalankan(args, out)
+        except BaseException as error:
+            catat_event(out, tahap="gagal", error=f"{type(error).__name__}: {error}")
+            raise
+        catat_event(out, tahap="selesai")
+
+
+def jalankan(args, out: Path) -> None:
     courses = load_documents(web_dir=WEB_CAT_DIR) if args.gabung else load_web_categorized()
+    catat_event(out, tahap="muat_korpus", dokumen=len(courses), gabung=args.gabung)
     queries = baca_dataset(args.dataset)
     retriever = rag.CourseRetriever(courses)
 
@@ -123,10 +142,6 @@ def main() -> None:
     for kategori in sorted({record["kategori"] for record in records}):
         rows.append(agregat(kategori, [record for record in records if record["kategori"] == kategori]))
 
-    nama_run = slug(args.metode) + ("-gabung" if args.gabung else "")
-    if "gold" in args.dataset.name:
-        nama_run += "-gold"
-    out = args.output / nama_run
     out.mkdir(parents=True, exist_ok=True)
     with (out / "metrics.csv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
