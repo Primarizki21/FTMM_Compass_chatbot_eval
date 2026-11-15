@@ -1,0 +1,35 @@
+# Patch data: source_name butir SOP (8 butir)
+#
+# Masalah: semua butir memakai source_name 'Alur Pengajuan Surat Rekomendasi', sehingga header
+# chunk [REGULASI: ...] salah untuk 7 butir dan mencemari skor BM25.
+#
+# Terapkan di dua tempat (berkasnya identik):
+#   repo eval : patch -p1 -d knowledge_base/regulasi < docs/patches/sop-source-name.patch
+#   repo app  : patch -p1 -d data/ground_truth   < docs/patches/sop-source-name.patch
+#
+# Konteks sengaja nol baris (-U0) agar teks institusi tidak ikut ke repo publik.
+# Setelah patch, indeks Dense wajib dibangun ulang karena corpus_hash berubah.
+
+--- a/google_drive_sop.json
++++ b/google_drive_sop.json
+@@ -19 +19 @@
+-    "source_name": "Alur Pengajuan Surat Rekomendasi",
++    "source_name": "Alur Pengajuan Surat Keterangan Mahasiswa Aktif (SKMA)",
+@@ -29 +29 @@
+-    "source_name": "Alur Pengajuan Surat Rekomendasi",
++    "source_name": "Alur Pengajuan Surat Keterangan",
+@@ -39 +39 @@
+-    "source_name": "Alur Pengajuan Surat Rekomendasi",
++    "source_name": "Alur Pengajuan Legalisir dan Transkrip Nilai",
+@@ -49 +49 @@
+-    "source_name": "Alur Pengajuan Surat Rekomendasi",
++    "source_name": "Alur Pengajuan Cuti Akademik",
+@@ -59 +59 @@
+-    "source_name": "Alur Pengajuan Surat Rekomendasi",
++    "source_name": "Alur Pengajuan Undur Diri",
+@@ -69 +69 @@
+-    "source_name": "Alur Pengajuan Surat Rekomendasi",
++    "source_name": "Alur Pengajuan Terlambat Bayar UKT",
+@@ -79 +79 @@
+-    "source_name": "Alur Pengajuan Surat Rekomendasi",
++    "source_name": "Alur Pengajuan Pengantar KTM Hilang",

@@ -34,6 +34,9 @@ setiap kali dataset atau `knowledge_base/` diganti. Kolom `source_uid` boleh ber
 yang sama di beberapa prodi; kolom `status` menandai baris yang belum bisa dipetakan (`kode-ambigu`,
 `butuh-dokumen-asal`) tanpa mengubah `GT_MASTER.csv`.
 
+Patch data yang menunggu adopsi dataset bersama ada di `docs/patches/`. Saat ini
+`sop-source-name.patch` memperbaiki `source_name` delapan butir SOP; setelah diterapkan, indeks Dense wajib dibuat ulang.
+
 ### Data web FTMM (terisolasi)
 
 Informasi publik `ftmm.unair.ac.id` masuk ke `web_kb/`, bukan `knowledge_base/`. Cara lengkap
