@@ -63,7 +63,7 @@ def uid_targets(item: dict) -> set[str]:
     return uids
 
 
-def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict], progress=None) -> list[dict]:
+def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict], progress=None, catatan=None) -> list[dict]:
     records = []
     for nomor, q in enumerate(queries, start=1):
         targets = uid_targets(q)
@@ -85,12 +85,13 @@ def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict], progre
                 "skor_kode": score_ranking(
                     (courses[i].kode for i, *_ in hits), {k.strip() for k in q["target_kode_mk"]}
                 ),
+                **(catatan or {}).get(q["question"], {}),
             }
         )
     return records
 
 
-def eval_complexity(search: SearchFn, courses: list[Course], queries: list[dict], progress=None) -> list[dict]:
+def eval_complexity(search: SearchFn, courses: list[Course], queries: list[dict], progress=None, catatan=None) -> list[dict]:
     records = []
     for nomor, q in enumerate(queries, start=1):
         hits, latency = run_search(search, q["query"])
@@ -118,6 +119,7 @@ def eval_complexity(search: SearchFn, courses: list[Course], queries: list[dict]
                 ((courses[i].kode, courses[i].prodi) for i, *_ in hits),
                 {(code, prodi) for code in codes},
             )
+        record.update((catatan or {}).get(q["query"], {}))
         records.append(record)
     return records
 
@@ -278,15 +280,16 @@ def run(
     output_dir: Path,
     limit: int | None = None,
     meta: dict | None = None,
+    catatan: dict | None = None,
 ) -> None:
     ir_queries, complexity_queries = load_queries()
     if limit is not None:
         ir_queries = ir_queries[:limit]
         complexity_queries = complexity_queries[:limit] + complexity_queries[-limit:]
 
-    ir_records = eval_ir(search, courses, ir_queries, progress=lapor_progres(output_dir))
+    ir_records = eval_ir(search, courses, ir_queries, progress=lapor_progres(output_dir), catatan=catatan)
     complexity_records = eval_complexity(
-        search, courses, complexity_queries, progress=lapor_progres(output_dir)
+        search, courses, complexity_queries, progress=lapor_progres(output_dir), catatan=catatan
     )
     unreachable = count_unreachable(courses, complexity_queries)
     rows = write_report(method, output_dir, courses, ir_records, complexity_records, unreachable, meta)

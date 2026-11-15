@@ -41,6 +41,7 @@ def main() -> None:
                 embed_query=lambda teks: llm.embed_texts([teks], keep_alive=args.keep_alive)[0],
             )
             posisi = {course.uid: index for index, course in enumerate(courses)}
+            catatan: dict[str, dict] = {}
 
             def cari(query: str) -> list[tuple[int, float, dict]]:
                 hasil = retriever.retrieve(
@@ -49,6 +50,8 @@ def main() -> None:
                     top_k=args.top_k,
                     reformulate=lambda teks: llm.reformulate_query(teks, config),
                 )
+                if hasil.reformulated_query:
+                    catatan[query] = {"kueri_reformulasi": hasil.reformulated_query}
                 return [(posisi[hit.course.uid], hit.score, hit.komponen) for hit in hasil.hits]
 
             embedding = llm.EMBED_MODEL if args.metode in rag.METHODS_NEEDING_EMBEDDING else ""
@@ -72,7 +75,7 @@ def main() -> None:
                 dokumen=len(courses),
                 **meta,
             )
-            run(args.metode, cari, courses, args.output, args.limit, meta=meta)
+            run(args.metode, cari, courses, args.output, args.limit, meta=meta, catatan=catatan)
         except BaseException as error:
             catat_event(args.output, tahap="gagal", error=f"{type(error).__name__}: {error}")
             raise
