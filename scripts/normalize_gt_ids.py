@@ -7,6 +7,7 @@ ditulis ke `ground_truth/gt_source_uids.csv`.
 
 import csv
 import json
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -111,6 +112,34 @@ def proses_web_gold() -> Counter:
     return status
 
 
+def prodi_dari_jawaban(teks: str, prodi_names: list[str]) -> str:
+    """GT silabus memuat baris `Program Studi: <prodi>` karena jawaban acuan dibuat dari template katalog."""
+    ditemukan = [prodi for prodi in prodi_names if prodi.lower() in teks.lower()]
+    if len(ditemukan) != 1:
+        return ""
+    marker = re.search(r"(?i)program\s*studi\s*[:\-]?\s*" + re.escape(ditemukan[0]), teks)
+    return ditemukan[0] if marker else ""
+
+
+def uid_dari_kandidat(teks: str, kandidat: list) -> tuple[str, str]:
+    """Urutan: prodi eksplisit -> nama MK di jawaban -> prodi-agnostik bila semua kandidat satu MK."""
+    prodi_names = sorted({d.prodi for d in kandidat if d.prodi})
+    prodi = prodi_dari_jawaban(teks, prodi_names)
+    cocok = [d for d in kandidat if d.prodi == prodi] if prodi else []
+    if len(cocok) == 1:
+        return cocok[0].uid, "prodi-dari-jawaban"
+
+    teks_lower = teks.lower()
+    nama = [d for d in kandidat if d.nama.lower() in teks_lower]
+    if len(nama) == 1:
+        return nama[0].uid, "nama-dari-jawaban"
+    if nama and len({d.nama for d in nama}) == 1:
+        return ";".join(sorted(d.uid for d in nama)), "multi-prodi"
+    if len({d.nama for d in kandidat}) == 1:
+        return ";".join(sorted(d.uid for d in kandidat)), "multi-prodi"
+    return "", "kode-ambigu"
+
+
 def proses_gt_master(by_kode: dict[str, list]) -> tuple[Counter, list[dict]]:
     """GT_MASTER tidak diubah; pemetaan source_id -> UID ditulis sebagai berkas terpisah."""
     baris = list(csv.DictReader(GT_PATH.open(encoding="utf-8-sig")))
@@ -122,7 +151,7 @@ def proses_gt_master(by_kode: dict[str, list]) -> tuple[Counter, list[dict]]:
         if len(kandidat) == 1:
             uid, label = kandidat[0].uid, "ok"
         elif kandidat:
-            uid, label = "", "kode-ambigu"
+            uid, label = uid_dari_kandidat(row["answer"], kandidat)
         else:
             uid, label = "", "butuh-dokumen-asal"
         status[label] += 1

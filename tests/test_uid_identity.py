@@ -1,5 +1,6 @@
 """UID adalah kunci penilaian retrieval; kode MK tidak unik lintas prodi."""
 
+import csv
 import json
 import sys
 from pathlib import Path
@@ -42,3 +43,17 @@ def test_target_uid_resolve_ke_korpus(nama):
             assert item["target_uids"] == []
             continue
         assert uid_targets(item) <= korpus, item["id"]
+
+
+def test_pemetaan_gt_master_konsisten():
+    path = GT_DIR / "gt_source_uids.csv"
+    if not path.exists():
+        pytest.skip("pemetaan belum dibuat di clone ini")
+    korpus = {d.uid for d in load_courses()} | {d.uid for d in load_regulations()}
+    terpetakan = {"ok", "prodi-dari-jawaban", "nama-dari-jawaban", "multi-prodi"}
+    with path.open(encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            if row["status"] in terpetakan:
+                assert set(row["source_uid"].split(";")) <= korpus, row["id"]
+            else:
+                assert row["source_uid"] == "", row["id"]

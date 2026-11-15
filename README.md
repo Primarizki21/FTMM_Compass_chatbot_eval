@@ -30,7 +30,9 @@ Ground truth diturunkan dari repo chatbot: `data/ground_truth/gt_master.json` de
 Penilaian retrieval memakai UID global, bukan `source_id`/`kode_mk`, karena kode MK tidak unik lintas prodi.
 `uv run python scripts/normalize_gt_ids.py` menambahkan `target_uids` ke kedua dataset JSON dan menulis pemetaan
 `source_id` → UID ke `ground_truth/gt_source_uids.csv`, plus laporan `results/gt_audit/uid_report.md`. Jalankan ulang
-setiap kali dataset atau `knowledge_base/` diganti.
+setiap kali dataset atau `knowledge_base/` diganti. Kolom `source_uid` boleh berisi beberapa UID dipisah `;` untuk MK
+yang sama di beberapa prodi; kolom `status` menandai baris yang belum bisa dipetakan (`kode-ambigu`,
+`butuh-dokumen-asal`) tanpa mengubah `GT_MASTER.csv`.
 
 ### Data web FTMM (terisolasi)
 
