@@ -169,3 +169,15 @@ def test_ledger_uses_manifest_provenance(tmp_path, monkeypatch):
     assert ground_truth["corpus_hash"] == "korpus123"
     assert ground_truth["dataset_hash"] == "gt789"
     assert ground_truth["commit"] == "cafe123"
+
+
+def test_ledger_menemukan_run_bersarang(tmp_path, monkeypatch):
+    monkeypatch.setattr(ledger, "ARCHIVES", tmp_path / "archives.csv")
+    results = tmp_path / "results"
+    write_csv(results / "retrieval" / "dense" / "metrics.csv", [RETRIEVAL_ROW])
+    (results / "retrieval" / "dense" / "summary.md").write_text("# Hasil Retrieval: Dense (Embedding)\n", encoding="utf-8")
+
+    rows = ledger.collect(results)
+
+    assert [row["run"] for row in rows] == ["dense"]
+    assert rows[0]["metode"] == "Dense (Embedding)"

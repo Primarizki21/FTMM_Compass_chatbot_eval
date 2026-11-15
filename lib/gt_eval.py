@@ -90,7 +90,17 @@ def summary_path(name: str, eval_dir: Path | None = None) -> Path:
     return (eval_dir or EVAL_DIR) / f"ringkasan_{name}.csv"
 
 
-MANIFEST_KEYS = ("corpus_sha256", "gt_sha256", "embedding", "provider", "model", "metode", "top_k")
+MANIFEST_KEYS = (
+    "corpus_sha256",
+    "gt_sha256",
+    "embedding",
+    "provider",
+    "model",
+    "metode",
+    "top_k",
+    "reasoning_effort",
+    "temperature",
+)
 
 
 def manifest_path(name: str, eval_dir: Path | None = None) -> Path:
@@ -115,6 +125,10 @@ def run_manifest_fields(
         "metode": method,
         "top_k": top_k,
         "embedding": llm.EMBED_MODEL if method in rag.METHODS_NEEDING_EMBEDDING else "",
+        "reasoning_effort": llm.OPENAI_REASONING_EFFORT if config.provider == llm.OPENAI else "",
+        "temperature": llm.CHAT_OPTIONS["temperature"]
+        if config.provider != llm.OPENAI or llm._openai_accepts_sampling()
+        else "tidak-dikirim",
         "corpus_sha256": rag.corpus_hash(retriever.courses),
         "gt_sha256": run_manifest.file_sha256(GT_PATH),
         "n_unit": n_planned,

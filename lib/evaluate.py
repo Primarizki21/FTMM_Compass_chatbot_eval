@@ -193,7 +193,9 @@ def write_report(
     ir_records: list[dict],
     complexity_records: list[dict],
     unreachable: int,
+    meta: dict | None = None,
 ) -> list[dict]:
+    meta = meta or {}
     output_dir.mkdir(parents=True, exist_ok=True)
     rows = build_rows(ir_records, complexity_records)
     oos = out_of_scope_stats(complexity_records)
@@ -237,10 +239,14 @@ def write_report(
         {
             "jenis": "retrieval",
             "metode": method,
-            "provider": "lokal",
-            "model": "-",
-            "top_k": TOP_TRACE,
-            "embedding": "-",
+            "provider": meta.get("provider", "lokal"),
+            "model": meta.get("model", "-"),
+            "top_k": meta.get("top_k", TOP_TRACE),
+            "top_k_eval": TOP_TRACE,
+            "embedding": meta.get("embedding", "-"),
+            "bm25_k1": meta.get("bm25_k1"),
+            "bm25_b": meta.get("bm25_b"),
+            "varian_kueri": meta.get("varian_kueri", "asli"),
             "corpus_sha256": corpus_hash(courses),
             "dataset": "ir_eval+complexity",
             "dataset_sha256": run_manifest.file_sha256(GT_DIR / "ir_eval_dataset.json"),
@@ -250,7 +256,14 @@ def write_report(
     return rows
 
 
-def run(method: str, search: SearchFn, courses: list[Course], output_dir: Path, limit: int | None = None) -> None:
+def run(
+    method: str,
+    search: SearchFn,
+    courses: list[Course],
+    output_dir: Path,
+    limit: int | None = None,
+    meta: dict | None = None,
+) -> None:
     ir_queries, complexity_queries = load_queries()
     if limit is not None:
         ir_queries = ir_queries[:limit]
@@ -259,7 +272,7 @@ def run(method: str, search: SearchFn, courses: list[Course], output_dir: Path, 
     ir_records = eval_ir(search, courses, ir_queries)
     complexity_records = eval_complexity(search, courses, complexity_queries)
     unreachable = count_unreachable(courses, complexity_queries)
-    rows = write_report(method, output_dir, courses, ir_records, complexity_records, unreachable)
+    rows = write_report(method, output_dir, courses, ir_records, complexity_records, unreachable, meta)
 
     print(f"Metode: {method} | korpus: {len(courses)} | target tak terjangkau kode+prodi: {unreachable}")
     for row in rows:

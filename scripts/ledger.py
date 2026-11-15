@@ -135,13 +135,20 @@ def read_manifest(path: Path) -> dict:
         return {}
 
 
+def kandidat_run(results_dir: Path) -> list[Path]:
+    """Direktori run satu atau dua tingkat: `results/<run>/` dan `results/<koleksi>/<run>/`."""
+    langsung = [p for p in results_dir.iterdir() if p.is_dir()]
+    bersarang = [q for p in langsung for q in p.iterdir() if q.is_dir()]
+    return sorted(set(langsung + bersarang))
+
+
 def collect(results_dir: Path) -> list[dict]:
     commit = git_commit()
     gt_hash = dataset_hash()
     archives = load_archives()
     records: list[dict] = []
 
-    for run_dir in sorted(p for p in results_dir.iterdir() if p.is_dir()):
+    for run_dir in kandidat_run(results_dir):
         run = run_dir.name
         manifest = read_manifest(run_dir / "run.json")
         metrics = run_dir / "metrics.csv"

@@ -196,9 +196,13 @@ dan pastikan layanan Ollama aktif, lalu muat ulang halaman.
 3. Untuk membandingkan retrieval tanpa LLM/GPU (opsional):
    ```
    uv run python run_bm25.py --limit 20
+   uv run python run_bm25.py --metode "Dense (Embedding)"
+   uv run python run_bm25.py --metode "Hybrid + Query Reformulation" --provider "OpenAI API"
    ```
-   Tanpa `--limit` seluruh dataset dijalankan; hasil ditulis ke `results/bm25/`: `metrics.csv`, `summary.md`,
-   `traces.jsonl` (satu baris per kueri dengan `kandidat` ber-`rank` dan `komponen` per tahap), dan `run.json`.
+   Tanpa `--limit` seluruh dataset dijalankan; hasil ditulis ke `results/retrieval/`: `metrics.csv`, `summary.md`,
+   `traces.jsonl` (satu baris per kueri dengan `kandidat` ber-`rank` dan `komponen` per tahap), `run.json`,
+   `run.log`, dan `log.jsonl`. `--provider`/`--model` hanya dipakai metode yang memanggil LLM; BM25, Dense, dan
+   Hybrid RRF mencatat `provider`/`model` sebagai `-` agar manifest tidak mengklaim LLM yang tidak dipakai.
 
 ## Evaluasi Ground Truth
 
@@ -333,7 +337,7 @@ Model LLM juga bisa diganti di sidebar. Index harus dibuat ulang setelah menggan
 |---|---|
 | `app.py` | UI Streamlit |
 | `build_index.py` | Membuat index Dense |
-| `run_bm25.py` | Evaluasi retrieval BM25 (`--output`, `--limit`) |
+| `run_bm25.py` | Evaluasi retrieval empat metode (`--metode`, `--provider`, `--model`, `--top-k`, `--output`, `--limit`); nama berkas dipertahankan demi tautan lama |
 | `scripts/ledger.py` | Menyusun ledger agregat dari `results/` |
 | `Makefile` | Perintah pendek: `sync`, `test`, `index`, `run`, `bm25`, `ledger` |
 | `lib/` | Knowledge base, retriever, LLM, manifest run, log CSV, evaluasi, metrik |
