@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from lib import run_manifest
+from lib import run_manifest, runlog
 from lib.kb import PRODI_BY_ACRONYM, ROOT, Course
 from lib.metrics import score_ranking
 from lib.rag import corpus_hash
@@ -63,11 +63,13 @@ def uid_targets(item: dict) -> set[str]:
     return uids
 
 
-def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict]) -> list[dict]:
+def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict], progress=None) -> list[dict]:
     records = []
-    for q in queries:
+    for nomor, q in enumerate(queries, start=1):
         targets = uid_targets(q)
         hits, latency = run_search(search, q["question"])
+        if progress:
+            progress("ir_eval", nomor, len(queries))
         records.append(
             {
                 "dataset": "ir_eval",
@@ -88,10 +90,12 @@ def eval_ir(search: SearchFn, courses: list[Course], queries: list[dict]) -> lis
     return records
 
 
-def eval_complexity(search: SearchFn, courses: list[Course], queries: list[dict]) -> list[dict]:
+def eval_complexity(search: SearchFn, courses: list[Course], queries: list[dict], progress=None) -> list[dict]:
     records = []
-    for q in queries:
+    for nomor, q in enumerate(queries, start=1):
         hits, latency = run_search(search, q["query"])
+        if progress:
+            progress("complexity", nomor, len(queries))
         record = {
             "dataset": "complexity",
             "id": q["id"],
@@ -244,6 +248,7 @@ def write_report(
             "top_k": meta.get("top_k", TOP_TRACE),
             "top_k_eval": TOP_TRACE,
             "embedding": meta.get("embedding", "-"),
+            "embed_keep_alive": meta.get("embed_keep_alive"),
             "bm25_k1": meta.get("bm25_k1"),
             "bm25_b": meta.get("bm25_b"),
             "varian_kueri": meta.get("varian_kueri", "asli"),
@@ -254,6 +259,16 @@ def write_report(
         },
     )
     return rows
+
+
+def lapor_progres(output_dir: Path):
+    """Satu event JSONL tiap 25 unit, supaya run panjang bisa dipantau tanpa log per kueri."""
+
+    def lapor(dataset: str, nomor: int, total: int) -> None:
+        if nomor % 25 == 0 or nomor == total:
+            runlog.catat_event(output_dir, tahap="progres", dataset=dataset, kueri=nomor, total=total)
+
+    return lapor
 
 
 def run(
@@ -269,8 +284,10 @@ def run(
         ir_queries = ir_queries[:limit]
         complexity_queries = complexity_queries[:limit] + complexity_queries[-limit:]
 
-    ir_records = eval_ir(search, courses, ir_queries)
-    complexity_records = eval_complexity(search, courses, complexity_queries)
+    ir_records = eval_ir(search, courses, ir_queries, progress=lapor_progres(output_dir))
+    complexity_records = eval_complexity(
+        search, courses, complexity_queries, progress=lapor_progres(output_dir)
+    )
     unreachable = count_unreachable(courses, complexity_queries)
     rows = write_report(method, output_dir, courses, ir_records, complexity_records, unreachable, meta)
 

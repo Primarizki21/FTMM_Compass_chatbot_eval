@@ -201,8 +201,10 @@ dan pastikan layanan Ollama aktif, lalu muat ulang halaman.
    ```
    Tanpa `--limit` seluruh dataset dijalankan; hasil ditulis ke `results/retrieval/`: `metrics.csv`, `summary.md`,
    `traces.jsonl` (satu baris per kueri dengan `kandidat` ber-`rank` dan `komponen` per tahap), `run.json`,
-   `run.log`, dan `log.jsonl`. `--provider`/`--model` hanya dipakai metode yang memanggil LLM; BM25, Dense, dan
-   Hybrid RRF mencatat `provider`/`model` sebagai `-` agar manifest tidak mengklaim LLM yang tidak dipakai.
+   `run.log`, dan `log.jsonl`. Korpus default sama dengan aplikasi: kurikulum + regulasi; `--web` menambahkan koleksi web.
+   `--provider`/`--model` hanya dipakai metode yang memanggil LLM; BM25, Dense, dan Hybrid RRF mencatat `provider`/`model`
+   sebagai `-` agar manifest tidak mengklaim LLM yang tidak dipakai. `--keep-alive 30m` menahan model embedding tetap
+   dimuat selama run (latensi lebih rendah, nilai tercatat di `run.json`); default `0` meniru perilaku aplikasi.
 
 ## Evaluasi Ground Truth
 

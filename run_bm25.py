@@ -6,7 +6,7 @@ from pathlib import Path
 
 from lib import llm, rag
 from lib.evaluate import run
-from lib.kb import ROOT, WEB_CAT_DIR, load_courses, load_documents
+from lib.kb import ROOT, WEB_CAT_DIR, load_documents
 from lib.runlog import catat_event, catat_run
 
 # ponytail: nama berkas tetap run_bm25.py demi tautan README/Makefile; rename saat target web ikut memakainya.
@@ -23,15 +23,23 @@ def main() -> None:
     parser.add_argument("--provider", choices=PROVIDER, default=llm.LOCAL, help="Hanya dipakai metode reformulasi")
     parser.add_argument("--model", default="", help="Kosong berarti model default provider")
     parser.add_argument("--top-k", type=int, default=5, help="Kandidat retrieval sebelum penilaian Top-5")
+    parser.add_argument(
+        "--keep-alive",
+        default="0",
+        help="Nilai keep_alive Ollama untuk embedding kueri; 0 = ikut perilaku aplikasi",
+    )
     args = parser.parse_args()
 
     with catat_run(args.output, sys.argv):
         try:
-            courses = load_documents(web_dir=WEB_CAT_DIR) if args.web else load_courses()
+            courses = load_documents(web_dir=WEB_CAT_DIR if args.web else None)
             catat_event(args.output, tahap="muat_korpus", dokumen=len(courses), web=args.web)
             model = args.model or llm.DEFAULT_MODELS[args.provider]
             config = llm.LLMConfig(provider=args.provider, model=model)
-            retriever = rag.CourseRetriever(courses)
+            retriever = rag.CourseRetriever(
+                courses,
+                embed_query=lambda teks: llm.embed_texts([teks], keep_alive=args.keep_alive)[0],
+            )
             posisi = {course.uid: index for index, course in enumerate(courses)}
 
             def cari(query: str) -> list[tuple[int, float, dict]]:
@@ -50,6 +58,7 @@ def main() -> None:
                 "provider": args.provider if butuh_llm else "-",
                 "model": model if butuh_llm else "-",
                 "embedding": embedding,
+                "embed_keep_alive": args.keep_alive if embedding else None,
                 "top_k": args.top_k,
                 "bm25_k1": retriever.bm25.k1 if punya_sparse else None,
                 "bm25_b": retriever.bm25.b if punya_sparse else None,
