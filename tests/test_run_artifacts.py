@@ -70,3 +70,23 @@ def test_to_trace_includes_component_scores():
 
     assert trace[0]["komponen"]["rrf"] == 0.03
     assert trace[1]["komponen"] == {}
+
+
+def test_eval_ir_menyimpan_kueri_reformulasi():
+    from lib.evaluate import eval_ir
+
+    dokumen = courses()
+    kueri = {
+        "id": "UJI-1",
+        "question": "cara cuti akademik",
+        "register": "formal",
+        "target_uids": [dokumen[0].uid or "U0"],
+        "target_kode_mk": [dokumen[0].kode],
+    }
+    dokumen[0] = Course(kode="K0", nama="Matkul 0", prodi="Teknik Industri", chunk="x", uid="U0")
+    catatan = {"cara cuti akademik": {"kueri_reformulasi": "cuti akademik prosedur"}}
+
+    baris = eval_ir(lambda _: [(0, 1.0, {"sparse": 1.0})], dokumen, [kueri], catatan=catatan)
+
+    assert baris[0]["kueri_reformulasi"] == "cuti akademik prosedur"
+    assert baris[0]["skor_uid"]["hit@1"] == 1.0
